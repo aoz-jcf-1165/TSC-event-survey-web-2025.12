@@ -2,8 +2,7 @@ name: Build Survey CSV
 
 on:
   issues:
-    types: [opened, edited]
-  workflow_dispatch:
+    types: [opened]
 
 jobs:
   build_csv:
@@ -13,47 +12,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Install GitHub CLI & jq
+      - name: Create data directory
+        run: mkdir -p data
+
+      - name: Append issue body to CSV
         run: |
-          sudo apt update
-          sudo apt install -y jq
-          type -p gh >/dev/null || curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-          sudo apt install -y gh
+          echo "timestamp,player_name,data" > data/survey.csv.tmp
+          echo "$(date +'%Y-%m-%d %H:%M:%S'),${{ github.event.issue.title }},${{ github.event.issue.body }}" >> data/survey.csv.tmp
 
-      - name: Read GitHub Issues and generate CSV
-        id: generate_csv
+          if [ -f data/survey.csv ]; then
+            tail -n +2 data/survey.csv >> data/survey.csv.tmp
+          fi
+
+          mv data/survey.csv.tmp data/survey.csv
+
+      - name: Commit CSV
         run: |
-          echo "timestamp,player,lang,Q2_1,Q2_2,Q3_1,Q3_2" > survey.csv
-
-          gh issue list --state all --json number,title,body,createdAt > issues.json
-
-          cat issues.json | jq -r '
-            .[] |
-            .body as $body |
-            $body |
-            split("\n") |
-            map(sub("\r";"")) |
-            {
-              timestamp: (.[0] | split(": ")[1]),
-              player: (.[1] | split(": ")[1]),
-              lang: (.[2] | split(": ")[1]),
-              Q2_1: (.[3] | split(": ")[1]),
-              Q2_2: (.[4] | split(": ")[1]),
-              Q3_1: (.[5] | split(": ")[1]),
-              Q3_2: (.[6] | split(": ")[1])
-            } |
-            [.timestamp, .player, .lang, .Q2_1, .Q2_2, .Q3_1, .Q3_2] |
-            @csv
-          ' >> survey.csv
-
-      - name: Commit survey.csv
-        run: |
-          mkdir -p data
-          mv survey.csv data/survey.csv
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Actions"
           git add data/survey.csv
-          git commit -m "Auto update survey CSV" || echo "No changes"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git commit -m "Update survey.csv from Issue #${{ github.event.issue.number }}" || echo "No changes to commit"
+
+      - name: Push to GitHub
+        uses: ad-m/github-push-action@v0.6.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
