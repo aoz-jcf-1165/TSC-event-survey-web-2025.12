@@ -80,18 +80,21 @@
     }
 
      .brand-logo {
-      width: 32px;
-      height: 32px;
-      border-radius: 999px;
-      overflow: hidden;              /* 中の画像を丸く切り抜き */
-      box-shadow: 0 0 18px rgba(56, 189, 248, 0.7);
-      display: inline-flex;
+      width: 48px;            /* 少し大きくすると丸が見えやすい */
+      height: 48px;
+      border-radius: 50%;     /* これで完全な円になる */
+      overflow: hidden;       /* 円からはみ出る部分を隠す */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff;       /* 透明部分が心配なら白背景を入れる */
     }
 
-    .brand-logo img {
+     .brand-logo img {
       width: 100%;
       height: 100%;
-      object-fit: cover;             /* いい感じにトリミング */
+      object-fit: cover;      /* 画像を正しい比率で中央にトリミング */
+      object-position: center;
       display: block;
     }
 
