@@ -1,0 +1,11 @@
+timestamp,player_name,data
+2025-12-10 08:45:22,Survey response from: test02,| Field | Value |
+| --- | --- |
+| timestamp | 2025-12-10T08:45:14.343Z |
+| language | en |
+| player_name | test02 |
+| Q02 (time) | A |
+| Q03 (time) | A |
+| Q04 (day) | H |
+
+_Generated automatically from Cloudflare Worker._
