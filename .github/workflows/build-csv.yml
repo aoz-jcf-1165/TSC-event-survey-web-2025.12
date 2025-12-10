@@ -1,61 +1,122 @@
 name: Build Survey CSV
 
 on:
+  # Collect survey responses から呼び出す
   workflow_dispatch:
-  issues:
-    types: [opened]
+    inputs:
+      issue_number:
+        description: "Issue number that contains the survey response"
+        required: true
+        type: string
 
 jobs:
   build_csv:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write
-      issues: read
-
     steps:
+      # 1) リポジトリを取得（履歴も持ってくる）
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          fetch-depth: 0
 
-      - name: Install jq
-        run: sudo apt-get install -y jq
+      # 2) アンケート Issue の本文を取得
+      - name: Load issue body
+        id: issue
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueNumber = parseInt('${{ github.event.inputs.issue_number }}', 10);
 
-      - name: Fetch issues and build CSV
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+            });
+
+            core.setOutput('body', issue.body || '');
+
+      # 3) data フォルダを必ず作成
+      - name: Create data directory
+        run: mkdir -p data
+
+      # 4) Issue の Markdown テーブルから値を取り出して 1 行の CSV に変換
+      - name: Build CSV row from issue body
+        id: csv
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_BODY: ${{ steps.issue.outputs.body }}
         run: |
-          mkdir -p data
-          echo "name,q1,q2,q3,timestamp" > data/survey.csv
+          body="$(printf '%s\n' "$ISSUE_BODY")"
 
-          issues_json=$(gh issue list --limit 200 --json number,title,body,createdAt)
+          # Markdown テーブルの 2 列目（項目名）をキーに 3 列目（値）を取得
+          get_value () {
+            printf '%s\n' "$body" \
+              | awk -F'|' -v key="$1" '
+                  $2 ~ key {
+                    val=$3
+                    gsub(/^[ \t]+|[ \t]+$/, "", val)
+                    gsub(/\r/, "", val)
+                    print val
+                    exit
+                  }
+                '
+          }
 
-          echo "$issues_json" | jq -c '.[]' | while read issue; do
-            title=$(echo "$issue" | jq -r '.title')
-            body=$(echo "$issue" | jq -r '.body')
-            ts=$(echo "$issue" | jq -r '.createdAt')
+          timestamp="$(get_value "timestamp")"
+          language="$(get_value "Language")"
+          player_name="$(get_value "Player")"
+          q02="$(get_value "Q2")"
+          q03="$(get_value "Q3")"
+          q04="$(get_value "Q4")"
 
-            name=$(echo "$title" | sed 's/Survey response from: //')
-            q1=$(echo "$body" | sed -n 's/^Q1: //p')
-            q2=$(echo "$body" | sed -n 's/^Q2: //p')
-            q3=$(echo "$body" | sed -n 's/^Q3: //p')
+          # CSV 用に " をエスケープしてダブルクオートで囲む
+          esc () {
+            v="$1"
+            v="${v//\"/\"\"}"
+            printf '"%s"' "$v"
+          }
 
-            echo "$name,$q1,$q2,$q3,$ts" >> data/survey.csv
-          done
+          row="$(printf '%s,%s,%s,%s,%s,%s\n' \
+            "$(esc "$timestamp")" \
+            "$(esc "$language")" \
+            "$(esc "$player_name")" \
+            "$(esc "$q02")" \
+            "$(esc "$q03")" \
+            "$(esc "$q04")")"
 
+          echo "row=$row" >> "$GITHUB_OUTPUT"
+
+      # 5) data/survey.csv にヘッダー付きで追記
+      - name: Append row to data/survey.csv
+        run: |
+          FILE="data/survey.csv"
+
+          if [ ! -f "$FILE" ]; then
+            echo 'timestamp,language,player_name,Q02_time,Q03_time,Q04_day' > "$FILE"
+          fi
+
+          echo '${{ steps.csv.outputs.row }}' >> "$FILE"
+
+      # 6) コミットする（変更が無いときはスキップ）
       - name: Commit CSV
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          if git diff --quiet; then
-            echo "No changes in CSV"
-          else
-            git add data/survey.csv
-            git commit -m "Update survey.csv"
-            git push
+          git add data/survey.csv
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
           fi
+
+          git commit -m "Update survey.csv for issue #${{ github.event.inputs.issue_number }}"
+
+      # 7) 競合に強い push（force-with-lease）
+      - name: Push to GitHub
+        uses: ad-m/github-push-action@v0.6.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: main          # ★ブランチ名が master の場合はここを master に変更
+          force_with_lease: true
