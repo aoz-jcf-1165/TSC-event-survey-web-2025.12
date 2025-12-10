@@ -1,6 +1,7 @@
 name: Build Survey CSV
 
 on:
+  workflow_dispatch:
   issues:
     types: [opened]
 
@@ -8,32 +9,53 @@ jobs:
   build_csv:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+      issues: read
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Create data directory
-        run: mkdir -p data
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
 
-      - name: Append issue body to CSV
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Fetch issues and build CSV
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "timestamp,player_name,data" > data/survey.csv.tmp
-          echo "$(date +'%Y-%m-%d %H:%M:%S'),${{ github.event.issue.title }},${{ github.event.issue.body }}" >> data/survey.csv.tmp
+          mkdir -p data
+          echo "name,q1,q2,q3,timestamp" > data/survey.csv
 
-          if [ -f data/survey.csv ]; then
-            tail -n +2 data/survey.csv >> data/survey.csv.tmp
-          fi
+          issues_json=$(gh issue list --limit 200 --json number,title,body,createdAt)
 
-          mv data/survey.csv.tmp data/survey.csv
+          echo "$issues_json" | jq -c '.[]' | while read issue; do
+            title=$(echo "$issue" | jq -r '.title')
+            body=$(echo "$issue" | jq -r '.body')
+            ts=$(echo "$issue" | jq -r '.createdAt')
+
+            name=$(echo "$title" | sed 's/Survey response from: //')
+            q1=$(echo "$body" | sed -n 's/^Q1: //p')
+            q2=$(echo "$body" | sed -n 's/^Q2: //p')
+            q3=$(echo "$body" | sed -n 's/^Q3: //p')
+
+            echo "$name,$q1,$q2,$q3,$ts" >> data/survey.csv
+          done
 
       - name: Commit CSV
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "GitHub Actions"
-          git add data/survey.csv
-          git commit -m "Update survey.csv from Issue #${{ github.event.issue.number }}" || echo "No changes to commit"
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
 
-      - name: Push to GitHub
-        uses: ad-m/github-push-action@v0.6.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          if git diff --quiet; then
+            echo "No changes in CSV"
+          else
+            git add data/survey.csv
+            git commit -m "Update survey.csv"
+            git push
+          fi
