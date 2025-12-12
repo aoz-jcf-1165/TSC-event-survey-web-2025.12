@@ -50,6 +50,13 @@ jobs:
               return s;
             }
 
+            function getFirst(map, keys) {
+              for (const k of keys) {
+                if (map[k]) return map[k];
+              }
+              return '';
+            }
+
             function parseIssueBody(body) {
               const lines = (body || '').split(/\r?\n/);
               const map = {};
@@ -65,12 +72,12 @@ jobs:
               }
 
               const rowObject = {
-                timestamp: map['timestamp'] || '',
-                language: map['language'] || '',
-                player_name: map['player_name'] || '',
-                Q2_time: map['Q2_time'] || map['Q02_time'] || '',
-                Q3_time: map['Q3_time'] || map['Q03_time'] || '',
-                Q4_day: map['Q4_day'] || map['Q04_day'] || '',
+                timestamp: getFirst(map, ['timestamp']),
+                language: getFirst(map, ['language']),
+                player_name: getFirst(map, ['player_name']),
+                Q2_time: getFirst(map, ['Q2_time', 'Q02_time', 'Q02 (time)', 'Q2 (time)']),
+                Q3_time: getFirst(map, ['Q3_time', 'Q03_time', 'Q03 (time)', 'Q3 (time)']),
+                Q4_day:  getFirst(map, ['Q4_day',  'Q04_day', 'Q04 (day)',  'Q4 (day)']),
               };
 
               const hasValue = Object.values(rowObject).some(
@@ -105,12 +112,11 @@ jobs:
               const content = fs.readFileSync(csvPath, 'utf8').trim();
               if (content) {
                 const lines = content.split(/\r?\n/);
-                const headerLine = lines[0];
-
-                // ヘッダーが予想と違っても、できるだけ読み取る
+                // 1行目はヘッダーとして無視
                 for (let i = 1; i < lines.length; i++) {
                   const line = lines[i].trim();
                   if (!line) continue;
+
                   // プレイヤー名などにカンマが含まれない前提で簡易パース
                   const cols = line.split(',');
                   existingRows.push({
@@ -119,7 +125,7 @@ jobs:
                     player_name: cols[2] || '',
                     Q2_time: cols[3] || '',
                     Q3_time: cols[4] || '',
-                    Q4_day: cols[5] || '',
+                    Q4_day:  cols[5] || '',
                   });
                 }
               }
@@ -134,7 +140,6 @@ jobs:
             // 今回の回答で上書き
             mapByPlayer.set(rowObject.player_name, rowObject);
 
-            // マップから配列へ（順番は特にこだわらない）
             const finalRows = Array.from(mapByPlayer.values());
 
             let csv = headers.join(',');
@@ -174,7 +179,5 @@ jobs:
           fi
 
           git commit -m "Update survey.csv from issue #${{ github.event.issue.number }}"
-
-          # 他のジョブが push していても rebase してから push
           git pull --rebase origin "$BRANCH" || true
           git push origin HEAD:"$BRANCH"
