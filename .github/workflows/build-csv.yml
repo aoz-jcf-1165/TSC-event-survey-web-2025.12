@@ -1,18 +1,14 @@
 name: Build Survey CSV
 
 on:
-  # 手動実行
   workflow_dispatch:
-
-  # 毎晩 JST 03:00 に自動再集計
   schedule:
-    - cron: "0 18 * * *"   # UTC 18:00 → JST 03:00
+    - cron: "0 18 * * *"   # UTC 18:00 → JST 翌日 03:00
 
 jobs:
   rebuild:
     runs-on: ubuntu-latest
 
-    # CSV を触るジョブは常に 1 本だけ
     concurrency:
       group: survey-csv
       cancel-in-progress: false
@@ -47,17 +43,8 @@ jobs:
             function escapeCSV(value) {
               if (value == null) return '';
               const s = String(value);
-              if (/[",\n]/.test(s)) {
-                return `"${s.replace(/"/g, '""')}"`;
-              }
+              if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
               return s;
-            }
-
-            function getFirst(map, keys) {
-              for (const k of keys) {
-                if (map[k]) return map[k];
-              }
-              return '';
             }
 
             function parseIssueBody(body) {
@@ -74,13 +61,12 @@ jobs:
               }
 
               const rowObject = {
-                timestamp: getFirst(map, ['timestamp']),
-                language: getFirst(map, ['language']),
-                player_name: getFirst(map, ['player_name']),
-                // 新旧すべてのキーに対応
-                Q2_time: getFirst(map, ['Q2_time', 'Q02_time', 'Q02 (time)', 'Q2 (time)']),
-                Q3_time: getFirst(map, ['Q3_time', 'Q03_time', 'Q03 (time)', 'Q3 (time)']),
-                Q4_day:  getFirst(map, ['Q4_day',  'Q04_day', 'Q04 (day)',  'Q4 (day)']),
+                timestamp: map['timestamp'] || '',
+                language: map['language'] || '',
+                player_name: map['player_name'] || '',
+                Q2_time: map['Q2_time'] || map['Q02_time'] || map['Q02 (time)'] || '',
+                Q3_time: map['Q3_time'] || map['Q03_time'] || map['Q03 (time)'] || '',
+                Q4_day: map['Q4_day'] || map['Q04_day'] || map['Q04 (day)'] || '',
               };
 
               const hasValue = Object.values(rowObject).some(v => (v || '') !== '');
@@ -133,21 +119,30 @@ jobs:
             core.setOutput('csv_path', csvPath);
             core.setOutput('row_count', finalRows.length);
 
-      - name: Commit and push changes
+      - name: Commit and push changes (with rebase & retry)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           git config user.name "${GITHUB_ACTOR}"
           git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
 
           git add data/survey.csv
-
           if git diff --cached --quiet; then
             echo "No updates to commit."
             exit 0
           fi
 
           git commit -m "Nightly rebuild survey.csv"
-          git pull --rebase origin "$BRANCH" || true
-          git push origin HEAD:"$BRANCH"
+
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin "$BRANCH" || true
+            if git push origin HEAD:"$BRANCH"; then
+              echo "Push success"
+              exit 0
+            fi
+            echo "Push failed, retry $i..."
+            sleep 2
+          done
+
+          echo "Push failed after retries"
+          exit 1
