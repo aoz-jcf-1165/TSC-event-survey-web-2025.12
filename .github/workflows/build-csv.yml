@@ -1,148 +1,45 @@
-name: Build Survey CSV
+name: rebuild
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 18 * * *"   # UTC 18:00 → JST 翌日 03:00
+  push:
+    paths:
+      - "data/answers.csv"
+      - "site/**"
+      - ".github/workflows/rebuild.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rebuild
+  cancel-in-progress: true
 
 jobs:
   rebuild:
     runs-on: ubuntu-latest
-
-    concurrency:
-      group: survey-csv
-      cancel-in-progress: false
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Rebuild data/survey.csv from all issues
-        id: rebuild
-        uses: actions/github-script@v7
+      - name: Use Node
+        uses: actions/setup-node@v4
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const path = require('path');
+          node-version: "20"
 
-            const owner = context.repo.owner;
-            const repo  = context.repo.repo;
+      - name: Build summary JSON
+        run: node site/build-summary.mjs
 
-            const headers = [
-              'timestamp',
-              'language',
-              'player_name',
-              'Q2_time',
-              'Q3_time',
-              'Q4_day',
-            ];
-
-            function escapeCSV(value) {
-              if (value == null) return '';
-              const s = String(value);
-              if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-              return s;
-            }
-
-            function parseIssueBody(body) {
-              const lines = (body || '').split(/\r?\n/);
-              const map = {};
-
-              for (const line of lines) {
-                const m = line.match(/^\s*\|\s*([^|]+?)\s*\|\s*(.*?)\s*\|\s*$/);
-                if (m) {
-                  const key = m[1].trim();
-                  const value = m[2].trim();
-                  map[key] = value;
-                }
-              }
-
-              const rowObject = {
-                timestamp: map['timestamp'] || '',
-                language: map['language'] || '',
-                player_name: map['player_name'] || '',
-                Q2_time: map['Q2_time'] || map['Q02_time'] || map['Q02 (time)'] || '',
-                Q3_time: map['Q3_time'] || map['Q03_time'] || map['Q03 (time)'] || '',
-                Q4_day: map['Q4_day'] || map['Q04_day'] || map['Q04 (day)'] || '',
-              };
-
-              const hasValue = Object.values(rowObject).some(v => (v || '') !== '');
-              return hasValue ? rowObject : null;
-            }
-
-            core.info(`Fetching issues...`);
-
-            const issues = await github.paginate(
-              github.rest.issues.listForRepo,
-              { owner, repo, state: 'all', per_page: 100 }
-            );
-
-            const latestByPlayer = new Map();
-
-            for (const issue of issues) {
-              if (!issue.title?.startsWith("Survey response from:")) continue;
-
-              const rowObject = parseIssueBody(issue.body || '');
-              if (!rowObject?.player_name) continue;
-
-              const key = rowObject.player_name;
-              const createdAt = new Date(issue.created_at);
-
-              const existing = latestByPlayer.get(key);
-              if (!existing || createdAt > existing.createdAt) {
-                latestByPlayer.set(key, { createdAt, row: rowObject });
-              }
-            }
-
-            const finalRows = [...latestByPlayer.values()]
-              .sort((a, b) => a.createdAt - b.createdAt)
-              .map(e => e.row);
-
-            const dataDir = path.join(process.cwd(), 'data');
-            fs.mkdirSync(dataDir, { recursive: true });
-
-            const csvPath = path.join(dataDir, 'survey.csv');
-
-            let csv = headers.join(',');
-            if (finalRows.length) {
-              csv += '\n' + finalRows
-                .map(r => headers.map(h => escapeCSV(r[h])).join(','))
-                .join('\n');
-            }
-            csv += '\n';
-
-            fs.writeFileSync(csvPath, csv, 'utf8');
-
-            core.setOutput('csv_path', csvPath);
-            core.setOutput('row_count', finalRows.length);
-
-      - name: Commit and push changes (with rebase & retry)
-        env:
-          BRANCH: ${{ github.event.repository.default_branch }}
+      - name: Commit outputs
         run: |
-          git config user.name "${GITHUB_ACTOR}"
-          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
-
-          git add data/survey.csv
-          if git diff --cached --quiet; then
-            echo "No updates to commit."
-            exit 0
+          if git status --porcelain | grep .; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add site/out/summary.json
+            git commit -m "rebuild: update summary"
+            git push
+          else
+            echo "No changes."
           fi
-
-          git commit -m "Nightly rebuild survey.csv"
-
-          for i in 1 2 3 4 5; do
-            git pull --rebase origin "$BRANCH" || true
-            if git push origin HEAD:"$BRANCH"; then
-              echo "Push success"
-              exit 0
-            fi
-            echo "Push failed, retry $i..."
-            sleep 2
-          done
-
-          echo "Push failed after retries"
-          exit 1
