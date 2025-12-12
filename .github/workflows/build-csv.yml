@@ -6,12 +6,13 @@ on:
 
   # 毎晩 JST 03:00 に自動再集計
   schedule:
-    - cron: "0 18 * * *"   # UTC 18:00 → JST 翌日 03:00
+    - cron: "0 18 * * *"   # UTC 18:00 → JST 03:00
 
 jobs:
   rebuild:
     runs-on: ubuntu-latest
 
+    # CSV を触るジョブは常に 1 本だけ
     concurrency:
       group: survey-csv
       cancel-in-progress: false
@@ -52,6 +53,13 @@ jobs:
               return s;
             }
 
+            function getFirst(map, keys) {
+              for (const k of keys) {
+                if (map[k]) return map[k];
+              }
+              return '';
+            }
+
             function parseIssueBody(body) {
               const lines = (body || '').split(/\r?\n/);
               const map = {};
@@ -66,12 +74,13 @@ jobs:
               }
 
               const rowObject = {
-                timestamp: map['timestamp'] || '',
-                language: map['language'] || '',
-                player_name: map['player_name'] || '',
-                Q2_time: map['Q2_time'] || map['Q02_time'] || '',
-                Q3_time: map['Q3_time'] || map['Q03_time'] || '',
-                Q4_day: map['Q4_day'] || map['Q04_day'] || '',
+                timestamp: getFirst(map, ['timestamp']),
+                language: getFirst(map, ['language']),
+                player_name: getFirst(map, ['player_name']),
+                // 新旧すべてのキーに対応
+                Q2_time: getFirst(map, ['Q2_time', 'Q02_time', 'Q02 (time)', 'Q2 (time)']),
+                Q3_time: getFirst(map, ['Q3_time', 'Q03_time', 'Q03 (time)', 'Q3 (time)']),
+                Q4_day:  getFirst(map, ['Q4_day',  'Q04_day', 'Q04 (day)',  'Q4 (day)']),
               };
 
               const hasValue = Object.values(rowObject).some(v => (v || '') !== '');
