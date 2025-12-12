@@ -6,11 +6,9 @@ on:
 
 jobs:
   collect:
-    # アンケート以外の Issue では動かさない
     if: startsWith(github.event.issue.title, 'Survey response from:')
     runs-on: ubuntu-latest
 
-    # CSV を触るジョブは常に 1 本だけ
     concurrency:
       group: survey-csv
       cancel-in-progress: false
@@ -44,17 +42,32 @@ jobs:
             function escapeCSV(value) {
               if (value == null) return '';
               const s = String(value);
-              if (/[",\n]/.test(s)) {
-                return `"${s.replace(/"/g, '""')}"`;
-              }
+              if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
               return s;
             }
 
-            function getFirst(map, keys) {
-              for (const k of keys) {
-                if (map[k]) return map[k];
+            // 最低限のCSVパーサ（ダブルクォート対応）
+            function parseCsvLine(line) {
+              const out = [];
+              let cur = '';
+              let inQ = false;
+              for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (inQ) {
+                  if (ch === '"') {
+                    if (line[i+1] === '"') { cur += '"'; i++; }
+                    else { inQ = false; }
+                  } else {
+                    cur += ch;
+                  }
+                } else {
+                  if (ch === ',') { out.push(cur); cur = ''; }
+                  else if (ch === '"') { inQ = true; }
+                  else { cur += ch; }
+                }
               }
-              return '';
+              out.push(cur);
+              return out;
             }
 
             function parseIssueBody(body) {
@@ -62,7 +75,6 @@ jobs:
               const map = {};
 
               for (const line of lines) {
-                // 例: "| timestamp | 2025-12-10T12:34:56Z |"
                 const m = line.match(/^\s*\|\s*([^|]+?)\s*\|\s*(.*?)\s*\|\s*$/);
                 if (m) {
                   const key = m[1].trim();
@@ -71,73 +83,70 @@ jobs:
                 }
               }
 
+              // 互換吸収（ここが重要）
               const rowObject = {
-                timestamp: getFirst(map, ['timestamp']),
-                language: getFirst(map, ['language']),
-                player_name: getFirst(map, ['player_name']),
-                Q2_time: getFirst(map, ['Q2_time', 'Q02_time', 'Q02 (time)', 'Q2 (time)']),
-                Q3_time: getFirst(map, ['Q3_time', 'Q03_time', 'Q03 (time)', 'Q3 (time)']),
-                Q4_day:  getFirst(map, ['Q4_day',  'Q04_day', 'Q04 (day)',  'Q4 (day)']),
+                timestamp: map['timestamp'] || '',
+                language: map['language'] || '',
+                player_name: map['player_name'] || '',
+                Q2_time:
+                  map['Q2_time'] ||
+                  map['Q02_time'] ||
+                  map['Q02 (time)'] ||
+                  '',
+                Q3_time:
+                  map['Q3_time'] ||
+                  map['Q03_time'] ||
+                  map['Q03 (time)'] ||
+                  '',
+                Q4_day:
+                  map['Q4_day'] ||
+                  map['Q04_day'] ||
+                  map['Q04 (day)'] ||
+                  '',
               };
 
-              const hasValue = Object.values(rowObject).some(
-                (v) => (v || '') !== ''
-              );
+              const hasValue = Object.values(rowObject).some(v => (v || '') !== '');
               return hasValue ? rowObject : null;
             }
 
             const rowObject = parseIssueBody(issue.body || '');
-            if (!rowObject) {
-              core.info(`Issue #${issue.number}: no valid survey body, skip.`);
+            if (!rowObject || !rowObject.player_name) {
+              core.info(`Issue #${issue.number}: invalid survey body, skip.`);
               core.setOutput('changed', 'false');
               return;
             }
-
-            if (!rowObject.player_name) {
-              core.info(`Issue #${issue.number}: player_name is empty, skip.`);
-              core.setOutput('changed', 'false');
-              return;
-            }
-
-            core.info(`Updating CSV for player: ${rowObject.player_name}`);
 
             const dataDir = path.join(process.cwd(), 'data');
             fs.mkdirSync(dataDir, { recursive: true });
 
             const csvPath = path.join(dataDir, 'survey.csv');
 
-            // 既存 CSV を読み込み
             let existingRows = [];
             if (fs.existsSync(csvPath)) {
-              const content = fs.readFileSync(csvPath, 'utf8').trim();
-              if (content) {
-                const lines = content.split(/\r?\n/);
-                // 1行目はヘッダーとして無視
+              const content = fs.readFileSync(csvPath, 'utf8');
+              const lines = content.split(/\r?\n/).filter(l => l.trim() !== '');
+              if (lines.length >= 1) {
+                // 1行目はヘッダ想定
                 for (let i = 1; i < lines.length; i++) {
-                  const line = lines[i].trim();
-                  if (!line) continue;
-
-                  // プレイヤー名などにカンマが含まれない前提で簡易パース
-                  const cols = line.split(',');
+                  const cols = parseCsvLine(lines[i]);
                   existingRows.push({
                     timestamp: cols[0] || '',
                     language: cols[1] || '',
                     player_name: cols[2] || '',
                     Q2_time: cols[3] || '',
                     Q3_time: cols[4] || '',
-                    Q4_day:  cols[5] || '',
+                    Q4_day: cols[5] || '',
                   });
                 }
               }
             }
 
-            // 同じ player_name は最新のものだけ残す
+            // 同一playerは上書き（古いのを削除）
             const mapByPlayer = new Map();
             for (const r of existingRows) {
               if (!r.player_name) continue;
               mapByPlayer.set(r.player_name, r);
             }
-            // 今回の回答で上書き
             mapByPlayer.set(rowObject.player_name, rowObject);
 
             const finalRows = Array.from(mapByPlayer.values());
@@ -156,28 +165,32 @@ jobs:
             core.setOutput('csv_path', csvPath);
             core.setOutput('player_name', rowObject.player_name);
 
-      - name: Show summary
-        if: steps.update.outputs.changed == 'true'
-        run: |
-          echo "Updated CSV: ${{ steps.update.outputs.csv_path }}"
-          echo "Player: ${{ steps.update.outputs.player_name }}"
-
-      - name: Commit and push CSV
+      - name: Commit and push CSV (with rebase & retry)
         if: steps.update.outputs.changed == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           git config user.name "${GITHUB_ACTOR}"
           git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
 
           git add data/survey.csv
-
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
 
           git commit -m "Update survey.csv from issue #${{ github.event.issue.number }}"
-          git pull --rebase origin "$BRANCH" || true
-          git push origin HEAD:"$BRANCH"
+
+          # rebaseしてpush（競合時は数回リトライ）
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin "$BRANCH" || true
+            if git push origin HEAD:"$BRANCH"; then
+              echo "Push success"
+              exit 0
+            fi
+            echo "Push failed, retry $i..."
+            sleep 2
+          done
+
+          echo "Push failed after retries"
+          exit 1
