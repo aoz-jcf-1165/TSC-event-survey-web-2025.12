@@ -2,16 +2,179 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>TSC Event Survey – Shared Documents</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Survey Documents</title>
+  <style>
+    :root{
+      --bg1:#0b1020;
+      --bg2:#020617;
+      --card:#0b1120;
+      --text:#e5e7eb;
+      --muted:#9ca3af;
+      --accent:#38bdf8;
+      --accentSoft: rgba(56,189,248,.18);
+      --radius:18px;
+      --shadow:0 18px 40px rgba(0,0,0,.45);
+    }
+    *{ box-sizing:border-box; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    body{
+      margin:0;
+      min-height:100vh;
+      color:var(--text);
+      background: radial-gradient(circle at top, #1f2937 0, var(--bg2) 55%);
+      display:flex;
+      justify-content:center;
+      padding:24px 16px 40px;
+    }
+    .wrap{ width:100%; max-width:560px; }
+    .card{
+      background: linear-gradient(135deg, var(--bg2), var(--bg2) 35%, var(--bg1));
+      border-radius:24px;
+      box-shadow:var(--shadow);
+      border:1px solid rgba(148,163,184,.15);
+      padding:18px 18px 20px;
+      position:relative;
+      overflow:hidden;
+    }
+    .card:before{
+      content:"";
+      position:absolute;
+      inset:-120px;
+      opacity:.18;
+      background:
+        radial-gradient(circle at 0 0, rgba(56,189,248,.4), transparent 55%),
+        radial-gradient(circle at 100% 0, rgba(129,140,248,.4), transparent 55%);
+      pointer-events:none;
+    }
+    .inner{ position:relative; z-index:1; }
+    h1{
+      margin:0 0 6px;
+      font-size:18px;
+      letter-spacing:.3px;
+    }
+    .sub{
+      margin:0 0 14px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.4;
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      border-radius:999px;
+      border:1px solid rgba(56,189,248,.55);
+      background:var(--accentSoft);
+      color:var(--text);
+      text-decoration:none;
+      font-size:12px;
+      box-shadow:0 10px 24px rgba(0,0,0,.25);
+      margin-bottom:12px;
+    }
+    .pill:hover{
+      border-color:rgba(56,189,248,.85);
+      background: rgba(56,189,248,.22);
+    }
+    .dot{
+      width:8px;height:8px;border-radius:999px;
+      background:var(--accent);
+      box-shadow:0 0 10px rgba(56,189,248,.9);
+    }
+    .list{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      margin-top:6px;
+    }
+    .item{
+      border:1px solid rgba(148,163,184,.25);
+      background: rgba(15,23,42,.75);
+      border-radius: var(--radius);
+      padding:12px;
+    }
+    .item-title{
+      font-size:13px;
+      font-weight:700;
+      margin:0 0 6px;
+    }
+    .item-meta{
+      font-size:11px;
+      color:var(--muted);
+      margin:0 0 10px;
+      line-height:1.4;
+    }
+    .btnrow{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      padding:8px 12px;
+      border-radius:999px;
+      border:1px solid rgba(148,163,184,.35);
+      background: rgba(2,6,23,.65);
+      color:var(--text);
+      text-decoration:none;
+      font-size:12px;
+    }
+    .btn:hover{
+      border-color: rgba(56,189,248,.7);
+    }
+    footer{
+      margin-top:10px;
+      text-align:center;
+      font-size:10px;
+      color:var(--muted);
+    }
+  </style>
 </head>
 <body>
-  <h1>TSC Event Survey</h1>
+  <div class="wrap">
+    <div class="card">
+      <div class="inner">
+        <h1>Survey Documents</h1>
+        <p class="sub">
+          Shared files for TSC Event Survey. Open the PDF in your browser and share the link with members.
+        </p>
 
-  <p>
-    <a href="./TSC-event-survey-2025-12.pdf" target="_blank">
-      📄 View Survey Summary (PDF)
-    </a>
-  </p>
+        <!-- 戻る（任意） -->
+        <a class="pill" href="../" rel="noopener">
+          <span class="dot"></span>
+          <span>Back to Survey</span>
+        </a>
+
+        <div class="list">
+          <div class="item">
+            <p class="item-title">TSC Event Survey Summary (PDF)</p>
+            <p class="item-meta">
+              File: <strong>TSC-event-survey-2025-12.pdf</strong><br />
+              Tip: If it doesn’t open, try another browser or open in a new tab.
+            </p>
+
+            <div class="btnrow">
+              <!-- ブラウザ表示（推奨） -->
+              <a class="btn" href="./TSC-event-survey-2025-12.pdf" target="_blank" rel="noopener">
+                📄 Open PDF
+              </a>
+
+              <!-- 直リンク（コピーしやすい） -->
+              <a class="btn" href="./TSC-event-survey-2025-12.pdf" rel="noopener">
+                🔗 Direct link
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <footer>
+          TSC Event Survey · share_document
+        </footer>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
-
