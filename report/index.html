@@ -6,14 +6,13 @@
   <title>TSC Event Survey - Report</title>
 
   <!-- CSS (cache busting) -->
-  <link rel="stylesheet" href="./report.css?v=20251216c" />
+  <link rel="stylesheet" href="./report.css?v=20251216d" />
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
-  <!-- ================= Header ================= -->
   <header class="topbar">
     <div class="wrap topbar-inner">
       <div>
@@ -27,10 +26,8 @@
     </div>
   </header>
 
-  <!-- ================= Main Layout ================= -->
   <main class="wrap grid">
-
-    <!-- ========== Left: Respondents ========== -->
+    <!-- Left: Respondents -->
     <aside class="side">
       <details class="card" open>
         <summary class="card-head">
@@ -43,32 +40,27 @@
             <table class="table table-respondents" id="tblRespondents">
               <thead>
                 <tr>
-                  <th style="width:56px;">No</th>
-                  <th>Name</th>
-                  <th style="width:64px;">Lang</th>
-                  <th style="width:56px;">Q2</th>
-                  <th style="width:56px;">Q3</th>
-                  <th style="width:56px;">Q4</th>
+                  <th class="th-sort" data-sort="no" title="Sort by No">No <span class="sort-ind" aria-hidden="true"></span></th>
+                  <th class="th-sort" data-sort="name" title="Sort by Name">Name <span class="sort-ind" aria-hidden="true"></span></th>
+                  <th class="th-sort" data-sort="lang" title="Tap to sort">Lang <span class="sort-ind" aria-hidden="true"></span></th>
+                  <th class="th-sort" data-sort="q2" title="Tap to sort">Q2 <span class="sort-ind" aria-hidden="true"></span></th>
+                  <th class="th-sort" data-sort="q3" title="Tap to sort">Q3 <span class="sort-ind" aria-hidden="true"></span></th>
+                  <th class="th-sort" data-sort="q4" title="Tap to sort">Q4 <span class="sort-ind" aria-hidden="true"></span></th>
                 </tr>
               </thead>
-              <tbody>
-                <!-- injected by report.js -->
-              </tbody>
+              <tbody><!-- injected --></tbody>
             </table>
           </div>
 
           <div class="hint">
-            Same player name re-submissions are automatically de-duplicated
-            and only the latest entry is counted.
+            Tap headers (Lang/Q2/Q3/Q4) to sort. Tap a truncated player name to view full text.
           </div>
         </div>
       </details>
     </aside>
 
-    <!-- ========== Right: Report Sections ========== -->
+    <!-- Right: Sections -->
     <section class="maincol">
-
-      <!-- ===== Q2 ===== -->
       <section class="card">
         <div class="card-head">
           <h2>Polar Invasion / Wasteland Showdown</h2>
@@ -78,19 +70,9 @@
           <div>
             <div class="table-wrap">
               <table class="table" id="tblQ2First">
-                <thead>
-                  <tr>
-                    <th>Time slot</th>
-                    <th class="num">Total</th>
-                  </tr>
-                </thead>
+                <thead><tr><th>Time slot</th><th class="num">Total</th></tr></thead>
                 <tbody></tbody>
-                <tfoot>
-                  <tr>
-                    <th>Total</th>
-                    <th class="num" id="q2FirstTotal">0</th>
-                  </tr>
-                </tfoot>
+                <tfoot><tr><th>Total</th><th class="num" id="q2FirstTotal">0</th></tr></tfoot>
               </table>
             </div>
           </div>
@@ -100,7 +82,6 @@
         </div>
       </section>
 
-      <!-- ===== Q3 ===== -->
       <section class="card">
         <div class="card-head">
           <h2>Elite War / Doom Arena / Zombie Uprize</h2>
@@ -109,19 +90,9 @@
         <div class="card-body split">
           <div class="table-wrap">
             <table class="table" id="tblQ3Time">
-              <thead>
-                <tr>
-                  <th>Time slot</th>
-                  <th class="num">Total</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Time slot</th><th class="num">Total</th></tr></thead>
               <tbody></tbody>
-              <tfoot>
-                <tr>
-                  <th>Total</th>
-                  <th class="num" id="q3TimeTotal">0</th>
-                </tr>
-              </tfoot>
+              <tfoot><tr><th>Total</th><th class="num" id="q3TimeTotal">0</th></tr></tfoot>
             </table>
           </div>
           <div class="chart-wrap">
@@ -130,7 +101,6 @@
         </div>
       </section>
 
-      <!-- ===== Q4 ===== -->
       <section class="card">
         <div class="card-head">
           <h2>Elite War / Doom Arena / Zombie Uprize</h2>
@@ -139,19 +109,9 @@
         <div class="card-body split">
           <div class="table-wrap">
             <table class="table" id="tblQ4Day">
-              <thead>
-                <tr>
-                  <th>Day</th>
-                  <th class="num">Total</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Day</th><th class="num">Total</th></tr></thead>
               <tbody></tbody>
-              <tfoot>
-                <tr>
-                  <th>Total</th>
-                  <th class="num" id="q4DayTotal">0</th>
-                </tr>
-              </tfoot>
+              <tfoot><tr><th>Total</th><th class="num" id="q4DayTotal">0</th></tr></tfoot>
             </table>
           </div>
           <div class="chart-wrap">
@@ -160,7 +120,6 @@
         </div>
       </section>
 
-      <!-- ===== Language ===== -->
       <section class="card">
         <div class="card-head">
           <h2>Language chosen</h2>
@@ -169,19 +128,9 @@
         <div class="card-body split">
           <div class="table-wrap">
             <table class="table" id="tblLang">
-              <thead>
-                <tr>
-                  <th>Language</th>
-                  <th class="num">Total</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Language</th><th class="num">Total</th></tr></thead>
               <tbody></tbody>
-              <tfoot>
-                <tr>
-                  <th>Total</th>
-                  <th class="num" id="langTotal">0</th>
-                </tr>
-              </tfoot>
+              <tfoot><tr><th>Total</th><th class="num" id="langTotal">0</th></tr></tfoot>
             </table>
           </div>
           <div class="chart-wrap">
@@ -190,16 +139,22 @@
         </div>
       </section>
 
-      <!-- ===== Footer ===== -->
       <footer class="footer">
         <button class="btn ghost" onclick="window.print()">Print / Save PDF</button>
       </footer>
-
     </section>
   </main>
 
-  <!-- JS (cache busting) -->
-  <script src="./report.js?v=20251216a"></script>
+  <!-- Name full-view dialog -->
+  <dialog id="nameDialog" class="dialog">
+    <div class="dialog-head">
+      <div class="dialog-title">Player name</div>
+      <button class="btn ghost dialog-close" id="dlgCloseBtn" type="button">Close</button>
+    </div>
+    <div class="dialog-body" id="dlgNameText"></div>
+  </dialog>
 
+  <!-- JS (cache busting) -->
+  <script src="./report.js?v=20251216d"></script>
 </body>
 </html>
