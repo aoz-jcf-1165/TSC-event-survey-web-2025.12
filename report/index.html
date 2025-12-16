@@ -22,7 +22,7 @@
   </header>
 
   <main class="wrap grid">
-    <!-- Left: Respondents -->
+    <!-- Respondents -->
     <aside class="side">
       <details class="card" open>
         <summary class="card-head">
@@ -32,7 +32,6 @@
         <div class="card-body">
           <div class="table-wrap">
             <table class="table" id="tblRespondents">
-              <!-- ★ Safari安定化：列幅を明示 -->
               <colgroup>
                 <col style="width:56px">
                 <col>
@@ -41,7 +40,6 @@
                 <col style="width:56px">
                 <col style="width:56px">
               </colgroup>
-
               <thead>
                 <tr>
                   <th class="num">No</th>
@@ -52,7 +50,7 @@
                   <th class="num">Q4</th>
                 </tr>
               </thead>
-              <tbody><!-- injected --></tbody>
+              <tbody></tbody>
             </table>
           </div>
           <div class="hint">
@@ -62,7 +60,7 @@
       </details>
     </aside>
 
-    <!-- Right: Sections -->
+    <!-- Charts -->
     <section class="maincol">
       <section class="card">
         <div class="card-head">
@@ -70,14 +68,12 @@
           <span class="muted">Q2 First preferred time</span>
         </div>
         <div class="card-body split">
-          <div>
-            <div class="table-wrap">
-              <table class="table" id="tblQ2First">
-                <thead><tr><th>Time slot</th><th class="num">Total</th></tr></thead>
-                <tbody></tbody>
-                <tfoot><tr><th>Total</th><th class="num" id="q2FirstTotal">0</th></tr></tfoot>
-              </table>
-            </div>
+          <div class="table-wrap">
+            <table class="table" id="tblQ2First">
+              <thead><tr><th>Time slot</th><th class="num">Total</th></tr></thead>
+              <tbody></tbody>
+              <tfoot><tr><th>Total</th><th class="num" id="q2FirstTotal">0</th></tr></tfoot>
+            </table>
           </div>
           <div class="chart-wrap"><canvas id="chartQ2First"></canvas></div>
         </div>
