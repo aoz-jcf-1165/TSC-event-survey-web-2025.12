@@ -22,37 +22,59 @@
   </header>
 
   <main class="wrap grid">
-    <!-- Respondents -->
+    <!-- Left: Respondents -->
     <aside class="side">
       <details class="card" open>
         <summary class="card-head">
           <h2>Respondents</h2>
           <span class="muted" id="respondentCount">0</span>
         </summary>
+
         <div class="card-body">
-          <div class="table-wrap">
-            <table class="table" id="tblRespondents">
-              <colgroup>
-                <col style="width:56px">
-                <col>
-                <col style="width:72px">
-                <col style="width:56px">
-                <col style="width:56px">
-                <col style="width:56px">
-              </colgroup>
-              <thead>
-                <tr>
-                  <th class="num">No</th>
-                  <th>Name</th>
-                  <th class="num">Lang</th>
-                  <th class="num">Q2</th>
-                  <th class="num">Q3</th>
-                  <th class="num">Q4</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
+          <!-- ★ Respondents専用：ヘッダーとボディを分離 -->
+          <div class="resp-wrap" id="respWrap">
+            <div class="resp-head">
+              <div class="table-wrap head-wrap" id="respHeadWrap">
+                <table class="table" id="tblRespondentsHead" aria-hidden="true">
+                  <colgroup>
+                    <col style="width:56px">
+                    <col>
+                    <col style="width:72px">
+                    <col style="width:56px">
+                    <col style="width:56px">
+                    <col style="width:56px">
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th class="num">No</th>
+                      <th>Name</th>
+                      <th class="num">Lang</th>
+                      <th class="num">Q2</th>
+                      <th class="num">Q3</th>
+                      <th class="num">Q4</th>
+                    </tr>
+                  </thead>
+                </table>
+              </div>
+            </div>
+
+            <div class="resp-body">
+              <div class="table-wrap body-wrap" id="respBodyWrap">
+                <table class="table" id="tblRespondents">
+                  <colgroup>
+                    <col style="width:56px">
+                    <col>
+                    <col style="width:72px">
+                    <col style="width:56px">
+                    <col style="width:56px">
+                    <col style="width:56px">
+                  </colgroup>
+                  <tbody><!-- injected --></tbody>
+                </table>
+              </div>
+            </div>
           </div>
+
           <div class="hint">
             Same player name re-submissions can be de-duplicated to the latest entry.
           </div>
@@ -60,7 +82,7 @@
       </details>
     </aside>
 
-    <!-- Charts -->
+    <!-- Right: Sections -->
     <section class="maincol">
       <section class="card">
         <div class="card-head">
@@ -68,12 +90,14 @@
           <span class="muted">Q2 First preferred time</span>
         </div>
         <div class="card-body split">
-          <div class="table-wrap">
-            <table class="table" id="tblQ2First">
-              <thead><tr><th>Time slot</th><th class="num">Total</th></tr></thead>
-              <tbody></tbody>
-              <tfoot><tr><th>Total</th><th class="num" id="q2FirstTotal">0</th></tr></tfoot>
-            </table>
+          <div>
+            <div class="table-wrap">
+              <table class="table" id="tblQ2First">
+                <thead><tr><th>Time slot</th><th class="num">Total</th></tr></thead>
+                <tbody></tbody>
+                <tfoot><tr><th>Total</th><th class="num" id="q2FirstTotal">0</th></tr></tfoot>
+              </table>
+            </div>
           </div>
           <div class="chart-wrap"><canvas id="chartQ2First"></canvas></div>
         </div>
