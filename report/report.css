@@ -13,7 +13,6 @@
 *{box-sizing:border-box}
 html,body{height:100%}
 
-/* --- Important: avoid mobile "seam" by using a fixed background layer --- */
 html{
   background: var(--bg);
   color:var(--text);
@@ -21,33 +20,28 @@ html{
 
 body{
   margin:0;
-  min-height:100svh; /* mobile safe viewport height */
+  min-height:100svh;
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans", "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
-  background: transparent; /* background handled by ::before */
+  background: transparent;
   color:var(--text);
   position: relative;
   overflow-x: hidden;
 }
 
-/* Fixed gradient layer that covers the entire viewport (prevents repeat seams) */
 body::before{
   content:"";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-
-  /* One continuous background */
   background:
     radial-gradient(1200px 600px at 10% 0%, rgba(110,168,254,.18), transparent 55%),
     radial-gradient(800px 500px at 90% 20%, rgba(130,87,229,.16), transparent 55%),
     var(--bg);
-
   background-repeat: no-repeat;
-  background-size: cover; /* ensures full coverage */
+  background-size: cover;
 }
 
-/* Optional very subtle overlay to hide any banding on some displays */
 body::after{
   content:"";
   position: fixed;
@@ -157,7 +151,7 @@ body::after{
 
 .table-wrap{
   overflow:auto;
-  -webkit-overflow-scrolling: touch; /* iOS scroll stability */
+  -webkit-overflow-scrolling: touch;
   border-radius:12px;
   border:1px solid var(--line);
   background:rgba(15,20,34,.55)
@@ -166,7 +160,7 @@ body::after{
 .table{
   width:100%;
   border-collapse:collapse;
-  min-width:320px; /* keep generic tables safe */
+  min-width:320px
 }
 
 .table th,.table td{
@@ -175,12 +169,13 @@ body::after{
   font-size:13px
 }
 
+/* 既定：他の表は sticky のまま */
 .table thead th{
   position:sticky;
   top:0;
   background:rgba(18,24,39,.95);
   text-align:left;
-  z-index:1; /* sticky header stability */
+  z-index:1;
 }
 
 .table td.num,.table th.num{text-align:right}
@@ -202,137 +197,99 @@ body::after{
 .footer{margin:14px 0 30px;display:flex;justify-content:flex-end}
 
 /* ================================
-   Respondents table: iOS header/column stability + new columns
+   ★ Respondents table iOS fix
    ================================ */
 
-/* Ensure enough width for 6 columns and stable sizing */
+/* colgroup前提で固定レイアウトにしてズレを防ぐ */
 #tblRespondents{
   min-width:560px;
-  table-layout:fixed; /* prevents iOS header jitter */
+  table-layout:fixed;
 }
 
-/* Explicit widths for fixed columns */
-#tblRespondents th:nth-child(1),
-#tblRespondents td:nth-child(1){ width:56px; }
+/* ★ ここが決定打：Respondentsだけ sticky を無効化 */
+#tblRespondents thead th{
+  position: static; /* iOS Safari のヘッダー崩れ回避 */
+}
 
-#tblRespondents th:nth-child(3),
-#tblRespondents td:nth-child(3){ width:72px; }
-
-#tblRespondents th:nth-child(4),
-#tblRespondents td:nth-child(4){ width:56px; }
-
-#tblRespondents th:nth-child(5),
-#tblRespondents td:nth-child(5){ width:56px; }
-
-#tblRespondents th:nth-child(6),
-#tblRespondents td:nth-child(6){ width:56px; }
-
-/* Name: single line + ellipsis */
+/* Name: 1行固定 + …（クリック対応はJSが付与する name-cell を使う） */
 #tblRespondents th:nth-child(2),
 #tblRespondents td:nth-child(2){
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
-/* Center-align for Lang and Q columns */
+/* Lang/Q columns center */
 #tblRespondents th:nth-child(3),
 #tblRespondents td:nth-child(3){
-  text-align: center;
+  text-align:center;
 }
-
 #tblRespondents th:nth-child(4),
 #tblRespondents th:nth-child(5),
 #tblRespondents th:nth-child(6),
 #tblRespondents td:nth-child(4),
 #tblRespondents td:nth-child(5),
 #tblRespondents td:nth-child(6){
-  text-align: center;
-  font-weight: 800;
-  letter-spacing: .3px;
+  text-align:center;
+  font-weight:800;
+  letter-spacing:.3px;
 }
 
-/* ================================
-   Name click -> modal (UI)
-   ================================ */
-
+/* Name cell clickable */
 #tblRespondents td.name-cell{
-  cursor: pointer;
+  cursor:pointer;
   text-decoration: underline;
   text-decoration-color: rgba(110,168,254,.5);
 }
 #tblRespondents td.name-cell:hover{
-  color: var(--accent);
+  color:var(--accent);
 }
 
-/* ================================
-   Q2/Q3/Q4 Color coding (A=blue, B=green...)
-   - report.js adds: class="code code-A" etc.
-   ================================ */
-.code{ font-weight: 800; letter-spacing: .3px; }
-
-/* A=Blue */
+/* Q color coding */
+.code{ font-weight:800; letter-spacing:.3px; }
 .code-A{ color:#6ea8fe; }
-/* B=Green */
 .code-B{ color:#22c55e; }
-/* C=Yellow */
 .code-C{ color:#facc15; }
-/* D=Orange */
 .code-D{ color:#fb923c; }
-/* E=Purple */
 .code-E{ color:#a78bfa; }
-/* F=Pink */
 .code-F{ color:#f472b6; }
-/* G=Cyan */
 .code-G{ color:#38bdf8; }
-/* H=Gray */
 .code-H{ color:#9ca3af; }
 
-/* ================================
-   Modal styles
-   - report.js injects #nameModal into <body>
-   ================================ */
-
+/* Modal */
 #nameModal{
-  position: fixed;
-  inset: 0;
-  display: none;
-  z-index: 1000;
+  position:fixed;
+  inset:0;
+  display:none;
+  z-index:1000;
 }
-
-#nameModal.open{
-  display: block;
-}
+#nameModal.open{ display:block; }
 
 #nameModal .modal-backdrop{
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,.65);
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,.65);
 }
 
 #nameModal .modal{
-  position: relative;
-  max-width: 420px;
-  margin: 20vh auto 0;
-  background: linear-gradient(180deg, rgba(18,24,39,.98), rgba(15,20,34,.98));
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-  padding: 16px;
+  position:relative;
+  max-width:420px;
+  margin:20vh auto 0;
+  background:linear-gradient(180deg, rgba(18,24,39,.98), rgba(15,20,34,.98));
+  border:1px solid var(--line);
+  border-radius:16px;
+  box-shadow:var(--shadow);
+  padding:16px;
 }
 
 .modal-head{
   display:flex;
   justify-content:space-between;
   align-items:center;
-  gap: 10px;
+  gap:10px;
   margin-bottom:10px;
 }
-
-.modal-head h3{
-  margin:0;
-  font-size:14px;
-}
+.modal-head h3{ margin:0; font-size:14px; }
 
 .modal-close{
   background:none;
@@ -341,16 +298,13 @@ body::after{
   font-size:20px;
   line-height:1;
   cursor:pointer;
-  padding: 0 6px;
+  padding:0 6px;
 }
-
-.modal-close:hover{
-  color: var(--text);
-}
+.modal-close:hover{ color:var(--text); }
 
 .modal-body{
   font-size:16px;
-  word-break: break-all;
+  word-break:break-all;
   padding-top:6px;
 }
 
@@ -363,3 +317,4 @@ body::after{
   .card{box-shadow:none;border:1px solid #ddd}
   .table-wrap{border:1px solid #ddd}
 }
+
