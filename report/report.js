@@ -1,9 +1,10 @@
 // ===============================
 // TSC Survey Report - report.js
-// - Respondents table: Q2/Q3/Q4 badges (A-H)
-// - Name tap => dialog shows full name
-// - Lang/Q2/Q3/Q4: FILTER (not sort)
-// - Filter UI + active filter pills
+// - Respondents: No / Name / Lang / Q2 / Q3 / Q4
+// - Filters: Lang / Q2 / Q3 / Q4 (Reset/Search removed)
+// - Lang options populated from CSV (fix "All only")
+// - Name tap -> dialog full view
+// - Charts remain overall totals (not filtered)
 // ===============================
 
 const CSV_URL = new URL("../data/survey.csv", location.href).toString();
@@ -14,30 +15,29 @@ const dlg = document.getElementById("nameDialog");
 const dlgNameText = document.getElementById("dlgNameText");
 const dlgCloseBtn = document.getElementById("dlgCloseBtn");
 
-// UI
+// Header UI
 const elLastUpdated = document.getElementById("lastUpdated");
 const elRespondentCount = document.getElementById("respondentCount");
 const elBtnRefresh = document.getElementById("btnRefresh");
 
+// Tables
 const tblRespondentsBody = document.querySelector("#tblRespondents tbody");
-const tblRespondents = document.getElementById("tblRespondents");
-
 const tblQ2FirstBody = document.querySelector("#tblQ2First tbody");
 const tblQ3TimeBody  = document.querySelector("#tblQ3Time tbody");
 const tblQ4DayBody   = document.querySelector("#tblQ4Day tbody");
 const tblLangBody    = document.querySelector("#tblLang tbody");
 
+// Totals
 const elQ2FirstTotal = document.getElementById("q2FirstTotal");
 const elQ3TimeTotal  = document.getElementById("q3TimeTotal");
 const elQ4DayTotal   = document.getElementById("q4DayTotal");
 const elLangTotal    = document.getElementById("langTotal");
 
-const filterName = document.getElementById("filterName");
+// Filters
 const filterLang = document.getElementById("filterLang");
 const filterQ2   = document.getElementById("filterQ2");
 const filterQ3   = document.getElementById("filterQ3");
 const filterQ4   = document.getElementById("filterQ4");
-const btnResetFilters = document.getElementById("btnResetFilters");
 const activeFilters = document.getElementById("activeFilters");
 
 let allRespondents = [];
@@ -48,7 +48,6 @@ const Q2_TIME_LABELS = {
   C: "C. Server Time 21:00 - 22:00",
   D: "D. Anytime",
 };
-
 const Q3_TIME_LABELS = {
   A: "A. Server Time around 04:00 - 05:00",
   B: "B. Server Time around 13:00 - 14:00",
@@ -56,7 +55,6 @@ const Q3_TIME_LABELS = {
   D: "D. Anytime",
   E: "E. N/A",
 };
-
 const Q4_DAY_LABELS = {
   A: "A. Monday",
   B: "B. Tuesday",
@@ -69,37 +67,16 @@ const Q4_DAY_LABELS = {
 };
 
 const LANGUAGE_LABELS = {
-  "en": "English",
-  "de": "Deutsch",
-  "nl": "Nederlands",
-  "fr": "Français",
-  "ru": "Русский",
-  "es": "Español",
-  "pt": "Português",
-  "it": "Italiano",
-  "zh-hans": "简体中文",
-  "ja": "日本語",
-  "ko": "한국어",
-  "zh-hant": "繁體中文",
-  "ar": "العربية",
-  "th": "ไทย",
-  "vi": "Tiếng Việt",
-  "tr": "Türkçe",
-  "pl": "Polski",
-  "ms": "Bahasa Melayu",
-  "id": "Bahasa Indonesia",
+  "en":"English","de":"Deutsch","nl":"Nederlands","fr":"Français","ru":"Русский","es":"Español","pt":"Português","it":"Italiano",
+  "zh-hans":"简体中文","ja":"日本語","ko":"한국어","zh-hant":"繁體中文","ar":"العربية","th":"ไทย","vi":"Tiếng Việt","tr":"Türkçe","pl":"Polski","ms":"Bahasa Melayu","id":"Bahasa Indonesia"
 };
-
-const LANGUAGE_ORDER = [
-  "en","de","nl","fr","ru","es","pt","it","zh-hans","ja","ko","zh-hant","ar","th","vi","tr","pl","ms","id"
-];
+const LANGUAGE_ORDER = ["en","de","nl","fr","ru","es","pt","it","zh-hans","ja","ko","zh-hant","ar","th","vi","tr","pl","ms","id"];
 
 function escapeHtml(s){
   return String(s ?? "").replace(/[&<>"']/g, m => ({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[m]));
 }
-
 function normalizeText(x){
   let s = String(x ?? "");
   s = s.replace(/^\uFEFF/, "");
@@ -107,19 +84,16 @@ function normalizeText(x){
   s = s.replace(/\u00A0/g, " ");
   return s.trim();
 }
-
 function parseTimestamp(ts){
   const t = Date.parse(ts);
   return Number.isFinite(t) ? t : 0;
 }
-
 function toAsciiLetter(ch){
   const code = ch.charCodeAt(0);
   if (code >= 0xFF21 && code <= 0xFF3A) return String.fromCharCode(code - 0xFF21 + 0x41);
   if (code >= 0xFF41 && code <= 0xFF5A) return String.fromCharCode(code - 0xFF41 + 0x61);
   return ch;
 }
-
 function extractLeadingLetter(value){
   const raw = normalizeText(value);
   if (!raw) return "";
@@ -131,7 +105,6 @@ function extractLeadingLetter(value){
   const m = raw.match(/^([A-Za-z])(?:[\.\s]|$)/);
   return m ? m[1].toUpperCase() : "";
 }
-
 function canonicalizeAnswer(value, labelMap){
   const s = normalizeText(value);
   if (!s) return "";
@@ -143,11 +116,11 @@ function canonicalizeAnswer(value, labelMap){
   if (found) return found;
   return normalized;
 }
-
-function langDisplay(langCodeRaw){
-  const code = normalizeText(langCodeRaw).toLowerCase();
-  const label = LANGUAGE_LABELS[code] || (code ? code : "—");
-  return { code: code || "—", label };
+function optionBadge(letter){
+  const L = normalizeText(letter).toUpperCase();
+  if (!L) return `<span class="opt is-empty">—</span>`;
+  const cls = /^[A-H]$/.test(L) ? `opt opt-${L}` : `opt`;
+  return `<span class="${cls}" title="${escapeHtml(L)}">${escapeHtml(L)}</span>`;
 }
 
 function parseCSV(text){
@@ -164,18 +137,12 @@ function parseCSV(text){
       if (c === '"'){
         const next = text[i+1];
         if (next === '"'){
-          field += '"';
-          i += 2;
-          continue;
+          field += '"'; i += 2; continue;
         } else {
-          inQuotes = false;
-          i++;
-          continue;
+          inQuotes = false; i++; continue;
         }
       } else {
-        field += c;
-        i++;
-        continue;
+        field += c; i++; continue;
       }
     } else {
       if (c === '"'){ inQuotes = true; i++; continue; }
@@ -230,13 +197,6 @@ function makeBar(canvasId, labels, values){
   return c;
 }
 
-function optionBadge(letter){
-  const L = normalizeText(letter).toUpperCase();
-  if (!L) return `<span class="opt is-empty">—</span>`;
-  const cls = /^[A-H]$/.test(L) ? `opt opt-${L}` : `opt`;
-  return `<span class="${cls}" title="${escapeHtml(L)}">${escapeHtml(L)}</span>`;
-}
-
 function fillTableGeneric(tbodyEl, rows, totalEl){
   tbodyEl.innerHTML = "";
   let total = 0;
@@ -262,25 +222,30 @@ async function loadCSV(){
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`CSV fetch failed: ${res.status} ${res.statusText}`);
   const text = await res.text();
+
   const rows = parseCSV(text);
 
   const required = ["timestamp","language","player_name","Q2_time","Q3_time","Q4_day"];
   const missing = required.filter(k => !(k in (rows[0] || {})));
   if (missing.length) throw new Error("CSV header missing: " + missing.join(", "));
+
   return rows;
 }
 
+// Deduplicate by latest timestamp per player_name
 function dedupeLatestByPlayer(rows){
   const map = new Map();
   for (const r of rows){
     const name = normalizeText(r.player_name);
     if (!name) continue;
+
     const ts = parseTimestamp(r.timestamp);
     const prev = map.get(name);
+
     if (!prev || ts > prev._ts || (ts === prev._ts && (prev._seq ?? 0) < (r._seq ?? 0))){
       map.set(name, {
         timestamp: normalizeText(r.timestamp),
-        language: normalizeText(r.language),
+        language: normalizeText(r.language).toLowerCase(),
         player_name: name,
         Q2_time: normalizeText(r.Q2_time),
         Q3_time: normalizeText(r.Q3_time),
@@ -290,6 +255,7 @@ function dedupeLatestByPlayer(rows){
       });
     }
   }
+
   const arr = Array.from(map.values());
   arr.sort((a,b) => (a._ts - b._ts) || ((a._seq ?? 0) - (b._seq ?? 0)));
   return arr;
@@ -338,7 +304,7 @@ function countLanguages(respondents){
   return out;
 }
 
-// --------- Name dialog ----------
+// ----- Dialog -----
 function openNameDialog(fullName){
   if (!dlg) return;
   dlgNameText.textContent = fullName;
@@ -349,24 +315,48 @@ function isTruncated(el){
   return el && (el.scrollWidth > el.clientWidth + 1);
 }
 
-// --------- Filters ----------
+// ----- Filters -----
+function buildLangOptions(respondents){
+  const counts = new Map();
+  respondents.forEach(r => {
+    const code = normalizeText(r.language).toLowerCase();
+    if (!code) return;
+    counts.set(code, (counts.get(code) || 0) + 1);
+  });
+
+  const current = filterLang.value;
+
+  filterLang.innerHTML = `<option value="">All</option>`;
+
+  const ordered = [];
+  LANGUAGE_ORDER.forEach(code => { if (counts.has(code)) ordered.push(code); });
+  const others = Array.from(counts.keys()).filter(c => !LANGUAGE_ORDER.includes(c)).sort();
+
+  [...ordered, ...others].forEach(code => {
+    const opt = document.createElement("option");
+    opt.value = code;
+    opt.textContent = `${code} (${counts.get(code)})`;
+    filterLang.appendChild(opt);
+  });
+
+  // restore selection if still exists
+  if (current && Array.from(filterLang.options).some(o => o.value === current)){
+    filterLang.value = current;
+  }
+}
+
 function getFilters(){
   return {
-    name: normalizeText(filterName?.value || "").toLowerCase(),
-    lang: normalizeText(filterLang?.value || "").toLowerCase(),
-    q2: normalizeText(filterQ2?.value || "").toUpperCase(),
-    q3: normalizeText(filterQ3?.value || "").toUpperCase(),
-    q4: normalizeText(filterQ4?.value || "").toUpperCase(),
+    lang: normalizeText(filterLang.value).toLowerCase(),
+    q2: normalizeText(filterQ2.value).toUpperCase(),
+    q3: normalizeText(filterQ3.value).toUpperCase(),
+    q4: normalizeText(filterQ4.value).toUpperCase(),
   };
 }
 
 function applyFilters(rows){
   const f = getFilters();
   return rows.filter(r => {
-    if (f.name){
-      const n = (r.player_name || "").toLowerCase();
-      if (!n.includes(f.name)) return false;
-    }
     if (f.lang){
       const lc = normalizeText(r.language).toLowerCase();
       if (lc !== f.lang) return false;
@@ -390,17 +380,15 @@ function renderActiveFilterPills(){
 
   const f = getFilters();
   const pills = [];
-
-  if (f.name) pills.push({ k:"Name", v: f.name, clear: () => (filterName.value="") });
-  if (f.lang) pills.push({ k:"Lang", v: f.lang, clear: () => (filterLang.value="") });
-  if (f.q2) pills.push({ k:"Q2", v: f.q2, clear: () => (filterQ2.value="") });
-  if (f.q3) pills.push({ k:"Q3", v: f.q3, clear: () => (filterQ3.value="") });
-  if (f.q4) pills.push({ k:"Q4", v: f.q4, clear: () => (filterQ4.value="") });
+  if (f.lang) pills.push({ k:"Lang", v:f.lang, clear:()=>{filterLang.value="";} });
+  if (f.q2)   pills.push({ k:"Q2",   v:f.q2,   clear:()=>{filterQ2.value="";} });
+  if (f.q3)   pills.push({ k:"Q3",   v:f.q3,   clear:()=>{filterQ3.value="";} });
+  if (f.q4)   pills.push({ k:"Q4",   v:f.q4,   clear:()=>{filterQ4.value="";} });
 
   pills.forEach(p => {
     const el = document.createElement("div");
     el.className = "pill";
-    el.innerHTML = `<span class="k">${escapeHtml(p.k)}:</span> <b>${escapeHtml(String(p.v))}</b> <button class="x" type="button" aria-label="Remove filter">×</button>`;
+    el.innerHTML = `<span class="k">${escapeHtml(p.k)}:</span> <b>${escapeHtml(p.v)}</b> <button class="x" type="button" aria-label="Remove filter">×</button>`;
     el.querySelector(".x").addEventListener("click", () => {
       p.clear();
       refreshRespondentsOnly();
@@ -409,68 +397,30 @@ function renderActiveFilterPills(){
   });
 }
 
-function resetFilters(){
-  if (filterName) filterName.value = "";
-  if (filterLang) filterLang.value = "";
-  if (filterQ2) filterQ2.value = "";
-  if (filterQ3) filterQ3.value = "";
-  if (filterQ4) filterQ4.value = "";
-  refreshRespondentsOnly();
+function refreshRespondentsOnly(){
+  const filtered = applyFilters(allRespondents);
+  renderActiveFilterPills();
+  renderRespondentsTable(filtered);
+
+  // グラフを「フィルター後の集計」にしたい場合は次行を有効化
+  // renderChartsFrom(filtered);
 }
 
-function buildLangOptions(respondents){
-  if (!filterLang) return;
-  const counts = new Map();
-  respondents.forEach(r => {
-    const code = normalizeText(r.language).toLowerCase();
-    if (!code) return;
-    counts.set(code, (counts.get(code) || 0) + 1);
-  });
-
-  // Keep current selection
-  const current = filterLang.value;
-
-  // Clear
-  filterLang.innerHTML = `<option value="">All</option>`;
-
-  // Prefer known order, then others
-  const ordered = [];
-  LANGUAGE_ORDER.forEach(code => {
-    if (counts.has(code)) ordered.push(code);
-  });
-  const others = Array.from(counts.keys()).filter(c => !LANGUAGE_ORDER.includes(c)).sort();
-
-  [...ordered, ...others].forEach(code => {
-    const label = LANGUAGE_LABELS[code] || code;
-    const n = counts.get(code) || 0;
-    const opt = document.createElement("option");
-    opt.value = code;
-    opt.textContent = `${code} (${n})`;
-    opt.title = label;
-    filterLang.appendChild(opt);
-  });
-
-  // Restore selection if still exists
-  if (current) filterLang.value = current;
-}
-
-// --------- Rendering ----------
+// ----- Rendering respondents -----
 function renderRespondentsTable(rows){
   tblRespondentsBody.innerHTML = "";
 
   rows.forEach((r, idx) => {
-    const { code, label } = langDisplay(r.language);
     const q2L = extractLeadingLetter(r.Q2_time);
     const q3L = extractLeadingLetter(r.Q3_time);
     const q4L = extractLeadingLetter(r.Q4_day);
 
     const fullName = r.player_name;
-
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="num">${idx + 1}</td>
       <td class="cell-name" title="${escapeHtml(fullName)}">${escapeHtml(fullName)}</td>
-      <td title="${escapeHtml(label)}">${escapeHtml(code)}</td>
+      <td>${escapeHtml(r.language || "—")}</td>
       <td>${optionBadge(q2L)}</td>
       <td>${optionBadge(q3L)}</td>
       <td>${optionBadge(q4L)}</td>
@@ -489,6 +439,7 @@ function renderRespondentsTable(rows){
   elRespondentCount.textContent = String(rows.length);
 }
 
+// ----- Charts / right side -----
 function renderChartsFrom(respondents){
   destroyCharts();
 
@@ -512,25 +463,14 @@ function renderChartsFrom(respondents){
   makeBar("chartLang", langRows.map(x=>x[0]), langRows.map(x=>x[1]));
 }
 
-function refreshRespondentsOnly(){
-  const filtered = applyFilters(allRespondents);
-  renderActiveFilterPills();
-  renderRespondentsTable(filtered);
-
-  // charts are global totals (all respondents) のままにしたい場合は何もしない
-  // 「フィルター後の集計」にしたいなら次行をON:
-  // renderChartsFrom(filtered);
-}
-
-// --------- Setup ----------
+// ----- Busy button -----
 function setButtonBusy(isBusy){
-  if (!elBtnRefresh) return;
   elBtnRefresh.disabled = isBusy;
   elBtnRefresh.textContent = isBusy ? "Loading..." : "Refresh";
 }
 
+// ----- Setup -----
 function setupDialog(){
-  if (!dlg) return;
   if (dlgCloseBtn) dlgCloseBtn.addEventListener("click", () => dlg.close());
   dlg.addEventListener("click", (e) => {
     const rect = dlg.getBoundingClientRect();
@@ -541,14 +481,10 @@ function setupDialog(){
 
 function setupFilters(){
   const onChange = () => refreshRespondentsOnly();
-
-  if (filterName) filterName.addEventListener("input", onChange);
-  if (filterLang) filterLang.addEventListener("change", onChange);
-  if (filterQ2) filterQ2.addEventListener("change", onChange);
-  if (filterQ3) filterQ3.addEventListener("change", onChange);
-  if (filterQ4) filterQ4.addEventListener("change", onChange);
-
-  if (btnResetFilters) btnResetFilters.addEventListener("click", resetFilters);
+  filterLang.addEventListener("change", onChange);
+  filterQ2.addEventListener("change", onChange);
+  filterQ3.addEventListener("change", onChange);
+  filterQ4.addEventListener("change", onChange);
 }
 
 async function refresh(){
@@ -558,11 +494,15 @@ async function refresh(){
     const rows = await loadCSV();
     rows.forEach((r, idx) => { r._seq = idx; });
 
-    const respondents = dedupeLatestByPlayer(rows);
-    allRespondents = respondents;
+    allRespondents = dedupeLatestByPlayer(rows);
 
+    // ★ Lang options fix: build AFTER allRespondents is ready
     buildLangOptions(allRespondents);
-    resetFilters(); // renders table + pills
+
+    // 初期表示（フィルターは保持：勝手に空に戻さない）
+    refreshRespondentsOnly();
+
+    // charts are overall totals
     renderChartsFrom(allRespondents);
 
   }catch(err){
@@ -575,7 +515,6 @@ async function refresh(){
     tblQ3TimeBody.innerHTML = "";
     tblQ4DayBody.innerHTML = "";
     tblLangBody.innerHTML = "";
-
     if (activeFilters) activeFilters.innerHTML = "";
 
     elRespondentCount.textContent = "0";
@@ -588,8 +527,7 @@ async function refresh(){
   }
 }
 
-// Init
-if (elBtnRefresh) elBtnRefresh.addEventListener("click", refresh);
+elBtnRefresh.addEventListener("click", refresh);
 setupDialog();
 setupFilters();
 refresh();
