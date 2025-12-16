@@ -1,10 +1,10 @@
 timestamp,language,player_name,Q2_time,Q3_time,Q4_day
-2025-12-16T01:09:21.288Z,ja,JCF,B,B,H
-2025-12-16T01:13:23.147Z,ru,Alexa,B,B,C
 2025-12-15T13:01:22.272Z,es,bbbb,B,B,H
 2025-12-15T13:12:51.404Z,en,Mogo,B,B,H
 2025-12-15T13:44:16.228Z,en,Pad,B,B,F
+2025-12-16T01:09:21.288Z,ja,JCF,B,B,H
 2025-12-16T01:12:47.783Z,fr,Capitainmada,B,D,C
+2025-12-16T01:13:23.147Z,ru,Alexa,B,B,C
 2025-12-16T02:02:39.208Z,ar,Maher,C,C,E
 2025-12-16T02:05:26.779Z,ar,Mntzer,C,C,H
 2025-12-16T02:07:56.890Z,es,Yenni,A,A,F
@@ -20,7 +20,6 @@ timestamp,language,player_name,Q2_time,Q3_time,Q4_day
 2025-12-16T03:50:08.917Z,ja,nora,B,B,H
 2025-12-16T04:31:37.701Z,ru,Lilu,B,B,E
 2025-12-16T04:37:35.867Z,en,꧁™BAP™꧂,B,B,D
-2025-12-16T12:50:04.405Z,en,Kasper,C,C,C
 2025-12-16T04:55:33.886Z,ru,Kazak_193,B,B,H
 2025-12-16T04:57:42.000Z,en,Mirage88,B,B,C
 2025-12-16T05:13:10.811Z,en,Doshka,B,B,E
@@ -42,6 +41,7 @@ timestamp,language,player_name,Q2_time,Q3_time,Q4_day
 2025-12-16T09:58:16.542Z,pt,Léo,C,C,H
 2025-12-16T10:14:55.281Z,en,Barracuda,B,B,H
 2025-12-16T12:46:55.809Z,ja,wallu,B,B,C
+2025-12-16T12:50:04.405Z,en,Kasper,C,C,C
 2025-12-16T18:00:03.572Z,en,BlackRhino,B,B,C
 2025-12-16T18:17:12.276Z,th,Kamol,B,B,H
 2025-12-16T18:21:08.117Z,en,Deez,C,C,E
