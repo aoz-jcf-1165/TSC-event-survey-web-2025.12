@@ -1,9 +1,9 @@
 // ===============================
 // TSC Survey Report - report.js
 // - Respondents: No / Name / Lang / Q2 / Q3 / Q4
-// - Filters: Lang / Q2 / Q3 / Q4 (Reset/Search removed)
-// - Lang options populated from CSV (fix "All only")
-// - Name tap -> dialog full view
+// - Filters: Lang / Q2 / Q3 / Q4
+// - Each filter shows option counts: "A (12)", "en (18)" etc.
+// - Name cell styled like link; tap -> dialog shows full name
 // - Charts remain overall totals (not filtered)
 // ===============================
 
@@ -132,18 +132,12 @@ function parseCSV(text){
 
   while (i < text.length){
     const c = text[i];
-
     if (inQuotes){
       if (c === '"'){
         const next = text[i+1];
-        if (next === '"'){
-          field += '"'; i += 2; continue;
-        } else {
-          inQuotes = false; i++; continue;
-        }
-      } else {
-        field += c; i++; continue;
-      }
+        if (next === '"'){ field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      } else { field += c; i++; continue; }
     } else {
       if (c === '"'){ inQuotes = true; i++; continue; }
       if (c === ","){ row.push(field); field=""; i++; continue; }
@@ -176,7 +170,6 @@ function destroyCharts(){
   charts.forEach(c => c.destroy());
   charts = [];
 }
-
 function makeBar(canvasId, labels, values){
   const ctx = document.getElementById(canvasId);
   const c = new Chart(ctx, {
@@ -196,7 +189,6 @@ function makeBar(canvasId, labels, values){
   charts.push(c);
   return c;
 }
-
 function fillTableGeneric(tbodyEl, rows, totalEl){
   tbodyEl.innerHTML = "";
   let total = 0;
@@ -208,12 +200,8 @@ function fillTableGeneric(tbodyEl, rows, totalEl){
   });
   totalEl.textContent = String(total);
 }
-
 function setUpdatedByLatestTimestamp(latestTs){
-  if (!latestTs){
-    elLastUpdated.textContent = "Last updated: –";
-    return;
-  }
+  if (!latestTs){ elLastUpdated.textContent = "Last updated: –"; return; }
   elLastUpdated.textContent = "Last updated: " + new Date(latestTs).toLocaleString();
 }
 
@@ -222,17 +210,14 @@ async function loadCSV(){
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`CSV fetch failed: ${res.status} ${res.statusText}`);
   const text = await res.text();
-
   const rows = parseCSV(text);
 
   const required = ["timestamp","language","player_name","Q2_time","Q3_time","Q4_day"];
   const missing = required.filter(k => !(k in (rows[0] || {})));
   if (missing.length) throw new Error("CSV header missing: " + missing.join(", "));
-
   return rows;
 }
 
-// Deduplicate by latest timestamp per player_name
 function dedupeLatestByPlayer(rows){
   const map = new Map();
   for (const r of rows){
@@ -255,7 +240,6 @@ function dedupeLatestByPlayer(rows){
       });
     }
   }
-
   const arr = Array.from(map.values());
   arr.sort((a,b) => (a._ts - b._ts) || ((a._seq ?? 0) - (b._seq ?? 0)));
   return arr;
@@ -304,7 +288,7 @@ function countLanguages(respondents){
   return out;
 }
 
-// ----- Dialog -----
+// ===== Dialog =====
 function openNameDialog(fullName){
   if (!dlg) return;
   dlgNameText.textContent = fullName;
@@ -315,36 +299,7 @@ function isTruncated(el){
   return el && (el.scrollWidth > el.clientWidth + 1);
 }
 
-// ----- Filters -----
-function buildLangOptions(respondents){
-  const counts = new Map();
-  respondents.forEach(r => {
-    const code = normalizeText(r.language).toLowerCase();
-    if (!code) return;
-    counts.set(code, (counts.get(code) || 0) + 1);
-  });
-
-  const current = filterLang.value;
-
-  filterLang.innerHTML = `<option value="">All</option>`;
-
-  const ordered = [];
-  LANGUAGE_ORDER.forEach(code => { if (counts.has(code)) ordered.push(code); });
-  const others = Array.from(counts.keys()).filter(c => !LANGUAGE_ORDER.includes(c)).sort();
-
-  [...ordered, ...others].forEach(code => {
-    const opt = document.createElement("option");
-    opt.value = code;
-    opt.textContent = `${code} (${counts.get(code)})`;
-    filterLang.appendChild(opt);
-  });
-
-  // restore selection if still exists
-  if (current && Array.from(filterLang.options).some(o => o.value === current)){
-    filterLang.value = current;
-  }
-}
-
+// ===== Filters (with counts) =====
 function getFilters(){
   return {
     lang: normalizeText(filterLang.value).toLowerCase(),
@@ -361,15 +316,9 @@ function applyFilters(rows){
       const lc = normalizeText(r.language).toLowerCase();
       if (lc !== f.lang) return false;
     }
-    if (f.q2){
-      if (extractLeadingLetter(r.Q2_time) !== f.q2) return false;
-    }
-    if (f.q3){
-      if (extractLeadingLetter(r.Q3_time) !== f.q3) return false;
-    }
-    if (f.q4){
-      if (extractLeadingLetter(r.Q4_day) !== f.q4) return false;
-    }
+    if (f.q2 && extractLeadingLetter(r.Q2_time) !== f.q2) return false;
+    if (f.q3 && extractLeadingLetter(r.Q3_time) !== f.q3) return false;
+    if (f.q4 && extractLeadingLetter(r.Q4_day) !== f.q4) return false;
     return true;
   });
 }
@@ -397,16 +346,74 @@ function renderActiveFilterPills(){
   });
 }
 
-function refreshRespondentsOnly(){
-  const filtered = applyFilters(allRespondents);
-  renderActiveFilterPills();
-  renderRespondentsTable(filtered);
+function buildSelectWithCounts(selectEl, values, order){
+  // Keep current selected value
+  const current = normalizeText(selectEl.value);
 
-  // グラフを「フィルター後の集計」にしたい場合は次行を有効化
-  // renderChartsFrom(filtered);
+  const counts = new Map();
+  values.forEach(v => {
+    if (!v) return;
+    counts.set(v, (counts.get(v) || 0) + 1);
+  });
+
+  // Build options
+  selectEl.innerHTML = `<option value="">All</option>`;
+
+  const addOpt = (val, label) => {
+    const opt = document.createElement("option");
+    opt.value = val;
+    opt.textContent = label;
+    selectEl.appendChild(opt);
+  };
+
+  if (order && order.length){
+    order.forEach(v => {
+      const n = counts.get(v) || 0;
+      if (n > 0) addOpt(v, `${v} (${n})`);
+    });
+    // extras
+    const extras = Array.from(counts.keys()).filter(v => !order.includes(v)).sort();
+    extras.forEach(v => addOpt(v, `${v} (${counts.get(v)})`));
+  } else {
+    Array.from(counts.keys()).sort().forEach(v => addOpt(v, `${v} (${counts.get(v)})`));
+  }
+
+  // Restore selection if still exists
+  if (current && Array.from(selectEl.options).some(o => o.value === current)){
+    selectEl.value = current;
+  }
 }
 
-// ----- Rendering respondents -----
+function rebuildAllFilterOptionsFrom(respondents){
+  // Lang
+  const langCodes = respondents
+    .map(r => normalizeText(r.language).toLowerCase())
+    .filter(Boolean);
+
+  // q letters
+  const q2Letters = respondents.map(r => extractLeadingLetter(r.Q2_time)).filter(Boolean);
+  const q3Letters = respondents.map(r => extractLeadingLetter(r.Q3_time)).filter(Boolean);
+  const q4Letters = respondents.map(r => extractLeadingLetter(r.Q4_day)).filter(Boolean);
+
+  // Lang (ordered)
+  // create language order list present
+  const orderLang = [];
+  LANGUAGE_ORDER.forEach(code => { if (langCodes.includes(code)) orderLang.push(code); });
+  const others = Array.from(new Set(langCodes)).filter(c => !LANGUAGE_ORDER.includes(c)).sort();
+  const finalLangOrder = [...orderLang, ...others];
+
+  buildSelectWithCounts(
+    filterLang,
+    langCodes,
+    finalLangOrder
+  );
+
+  buildSelectWithCounts(filterQ2, q2Letters, ["A","B","C","D"]);
+  buildSelectWithCounts(filterQ3, q3Letters, ["A","B","C","D","E"]);
+  buildSelectWithCounts(filterQ4, q4Letters, ["A","B","C","D","E","F","G","H"]);
+}
+
+// ===== Respondents rendering =====
 function renderRespondentsTable(rows){
   tblRespondentsBody.innerHTML = "";
 
@@ -416,6 +423,7 @@ function renderRespondentsTable(rows){
     const q4L = extractLeadingLetter(r.Q4_day);
 
     const fullName = r.player_name;
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="num">${idx + 1}</td>
@@ -428,7 +436,10 @@ function renderRespondentsTable(rows){
 
     const nameCell = tr.querySelector(".cell-name");
     nameCell.addEventListener("click", () => {
-      if (isTruncated(nameCell) || fullName.length >= 16){
+      // always open (but keep it natural: only when it feels necessary)
+      if (isTruncated(nameCell) || fullName.length >= 10){
+        openNameDialog(fullName);
+      } else {
         openNameDialog(fullName);
       }
     });
@@ -439,7 +450,16 @@ function renderRespondentsTable(rows){
   elRespondentCount.textContent = String(rows.length);
 }
 
-// ----- Charts / right side -----
+function refreshRespondentsOnly(){
+  const filtered = applyFilters(allRespondents);
+  renderActiveFilterPills();
+  renderRespondentsTable(filtered);
+
+  // グラフを「フィルター後」にしたいなら下をON
+  // renderChartsFrom(filtered);
+}
+
+// ===== Charts =====
 function renderChartsFrom(respondents){
   destroyCharts();
 
@@ -463,13 +483,13 @@ function renderChartsFrom(respondents){
   makeBar("chartLang", langRows.map(x=>x[0]), langRows.map(x=>x[1]));
 }
 
-// ----- Busy button -----
+// ===== Busy =====
 function setButtonBusy(isBusy){
   elBtnRefresh.disabled = isBusy;
   elBtnRefresh.textContent = isBusy ? "Loading..." : "Refresh";
 }
 
-// ----- Setup -----
+// ===== Setup =====
 function setupDialog(){
   if (dlgCloseBtn) dlgCloseBtn.addEventListener("click", () => dlg.close());
   dlg.addEventListener("click", (e) => {
@@ -496,13 +516,13 @@ async function refresh(){
 
     allRespondents = dedupeLatestByPlayer(rows);
 
-    // ★ Lang options fix: build AFTER allRespondents is ready
-    buildLangOptions(allRespondents);
+    // Build ALL filter options with counts (Lang + Q2/Q3/Q4)
+    rebuildAllFilterOptionsFrom(allRespondents);
 
-    // 初期表示（フィルターは保持：勝手に空に戻さない）
+    // Render respondents with current filters
     refreshRespondentsOnly();
 
-    // charts are overall totals
+    // Charts are overall totals
     renderChartsFrom(allRespondents);
 
   }catch(err){
@@ -515,6 +535,7 @@ async function refresh(){
     tblQ3TimeBody.innerHTML = "";
     tblQ4DayBody.innerHTML = "";
     tblLangBody.innerHTML = "";
+
     if (activeFilters) activeFilters.innerHTML = "";
 
     elRespondentCount.textContent = "0";
