@@ -172,10 +172,11 @@ body::after{
   background:rgba(15,20,34,.55)
 }
 
+/* IMPORTANT: allow shrinking to fit container */
 .table{
   width:100%;
   border-collapse:collapse;
-  min-width:320px
+  min-width:0; /* was 320px; keeping 0 prevents overflow on mobile */
 }
 
 .table th,.table td{
@@ -196,10 +197,45 @@ body::after{
 .table tfoot th,.table tfoot td{font-weight:800;background:rgba(18,24,39,.65)}
 .table tfoot tr{border-top:1px solid var(--line)}
 
-/* Respondents table: keep columns tighter */
-.table-respondents{ min-width: 420px; }
-.table-respondents td, .table-respondents th{ white-space: nowrap; }
-.table-respondents td:nth-child(2){ white-space: normal; } /* Name can wrap */
+/* ================================
+   Respondents table: responsive fit
+   - No column is ALWAYS visible
+   - Name auto-scales down when long
+   - Keep overall width aligned (no layout break)
+   ================================ */
+.table-respondents{
+  table-layout: fixed; /* critical: force columns to fit */
+  width: 100%;
+  min-width: 0;
+}
+
+.table-respondents th,
+.table-respondents td{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ensure No column stays visible (explicit) */
+.table-respondents th:nth-child(1),
+.table-respondents td:nth-child(1){
+  display: table-cell !important;
+}
+
+/* Name column: default (desktop/tablet) */
+.table-respondents td:nth-child(2){
+  font-size: 13px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Lang column: compact */
+.table-respondents th:nth-child(3),
+.table-respondents td:nth-child(3){
+  white-space: nowrap;
+}
 
 /* Option badge (A-H) */
 .opt{
@@ -229,6 +265,7 @@ body::after{
 .opt-G{ background: var(--optG); }
 .opt-H{ background: var(--optH); }
 
+/* Charts */
 .chart-wrap{
   border:1px solid var(--line);
   border-radius:12px;
@@ -241,6 +278,67 @@ body::after{
 .chart-wrap canvas{width:100% !important;height:100% !important}
 
 .footer{margin:14px 0 30px;display:flex;justify-content:flex-end}
+
+/* ================================
+   Mobile: perfect width alignment
+   - Keep No visible
+   - Fix widths for No/Lang/Q columns
+   - Name column uses remaining space and auto-scales down
+   ================================ */
+@media (max-width: 520px){
+  .wrap{padding:12px}
+
+  /* Header: tighter */
+  .title{font-size:17px}
+  .badge{padding:7px 9px}
+  .btn{padding:8px 11px}
+
+  /* Tables: tighter spacing */
+  .table th,.table td{
+    padding:8px 8px;
+    font-size:12px;
+  }
+
+  /* Fixed widths so the whole table fits phone width */
+  .table-respondents th:nth-child(1),
+  .table-respondents td:nth-child(1){
+    width: 34px; /* No */
+  }
+
+  .table-respondents th:nth-child(3),
+  .table-respondents td:nth-child(3){
+    width: 42px; /* Lang */
+  }
+
+  .table-respondents th:nth-child(4),
+  .table-respondents td:nth-child(4),
+  .table-respondents th:nth-child(5),
+  .table-respondents td:nth-child(5),
+  .table-respondents th:nth-child(6),
+  .table-respondents td:nth-child(6){
+    width: 52px; /* Q2/Q3/Q4 */
+  }
+
+  /* Name column: auto scale down when needed (2-step) */
+  .table-respondents td:nth-child(2){
+    font-size: 12px;       /* step 1 */
+    line-height: 1.2;
+  }
+
+  /* iOS Safari tends to need a bit smaller for long names */
+  @supports (-webkit-touch-callout: none){
+    .table-respondents td:nth-child(2){
+      font-size: 11px;     /* step 2 */
+    }
+  }
+
+  /* Option badges slightly smaller on mobile */
+  .opt{
+    min-width:30px;
+    padding:4px 7px;
+    font-size:12px;
+  }
+}
 
 /* Print/PDF */
 @media print{
