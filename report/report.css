@@ -189,31 +189,70 @@ body::after{
 .table tfoot th,.table tfoot td{font-weight:800;background:rgba(18,24,39,.65)}
 .table tfoot tr{border-top:1px solid var(--line)}
 
-/* Respondents: fixed layout so it always fits */
+/* ================================
+   Respondents widths: minimal but keep header labels visible
+   - Header labels: No / Name / Lang / Q2 / Q3 / Q4 must NOT truncate
+   - Data cells may ellipsis (Name) / badges are fixed
+   ================================ */
 .table-respondents{
   table-layout: fixed;
   width: 100%;
 }
 
-/* Compact + ellipsis */
-.table-respondents th,
-.table-respondents td{
+/* Header should NEVER ellipsis */
+.table-respondents thead th{
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* Data cells can ellipsis */
+.table-respondents tbody td{
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* No column: minimal width */
+/* Column widths (ch = approx character width)
+   Keep as small as possible while ensuring labels are fully visible.
+*/
 .table-respondents th:nth-child(1),
 .table-respondents td:nth-child(1){
-  width: 2.4em;                /* minimal but readable */
+  width: 3.2ch;                 /* "No" + room for 2-digit/3-digit */
   text-align: right;
   font-variant-numeric: tabular-nums;
   padding-left:8px;
   padding-right:8px;
 }
 
-/* Name column: clickable */
+.table-respondents th:nth-child(3),
+.table-respondents td:nth-child(3){
+  width: 5.2ch;                 /* "Lang" label visible + 2-letter codes */
+  text-align: left;
+  padding-left:8px;
+  padding-right:8px;
+}
+
+/* Q columns: enough for label Q2/Q3/Q4 and badge */
+.table-respondents th:nth-child(4),
+.table-respondents td:nth-child(4),
+.table-respondents th:nth-child(5),
+.table-respondents td:nth-child(5),
+.table-respondents th:nth-child(6),
+.table-respondents td:nth-child(6){
+  width: 4.2ch;                 /* fits "Q2" and a compact badge */
+  text-align: center;
+  padding-left:6px;
+  padding-right:6px;
+}
+
+/* Name column takes the remaining space */
+.table-respondents th:nth-child(2),
+.table-respondents td:nth-child(2){
+  width: auto;
+}
+
+/* Name column: clickable (for dialog) */
 .table-respondents td:nth-child(2){
   cursor: pointer;
 }
@@ -240,8 +279,8 @@ body::after{
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  min-width:34px;
-  padding:4px 8px;
+  min-width: 2.2em;             /* small but stable */
+  padding: 4px 7px;
   border-radius:999px;
   border:1px solid rgba(255,255,255,.10);
   font-weight:800;
@@ -260,6 +299,7 @@ body::after{
 .opt-G{ background: var(--optG); }
 .opt-H{ background: var(--optH); }
 
+/* Charts */
 .chart-wrap{
   border:1px solid var(--line);
   border-radius:12px;
@@ -272,7 +312,7 @@ body::after{
 
 .footer{margin:14px 0 30px;display:flex;justify-content:flex-end}
 
-/* Mobile tightening */
+/* Mobile tightening: keep labels visible, keep columns minimal */
 @media (max-width: 520px){
   .wrap{padding:12px}
   .title{font-size:17px}
@@ -284,27 +324,50 @@ body::after{
     font-size:12px;
   }
 
-  /* Ensure No column stays minimal on mobile */
+  /* Re-assert minimal widths on very small screens */
   .table-respondents th:nth-child(1),
   .table-respondents td:nth-child(1){
-    width: 2.2em;
+    width: 3.0ch;
+    padding-left:6px;
+    padding-right:6px;
   }
 
-  /* Name: base step down on mobile */
+  .table-respondents th:nth-child(3),
+  .table-respondents td:nth-child(3){
+    width: 5.0ch;
+    padding-left:6px;
+    padding-right:6px;
+  }
+
+  .table-respondents th:nth-child(4),
+  .table-respondents td:nth-child(4),
+  .table-respondents th:nth-child(5),
+  .table-respondents td:nth-child(5),
+  .table-respondents th:nth-child(6),
+  .table-respondents td:nth-child(6){
+    width: 4.0ch;
+    padding-left:5px;
+    padding-right:5px;
+  }
+
+  /* Name font down one step on mobile */
   .table-respondents td:nth-child(2){
     font-size: 12px;
     line-height: 1.2;
   }
 
-  /* iOS Safari: a bit smaller */
+  /* iOS Safari: a bit smaller for long names */
   @supports (-webkit-touch-callout: none){
     .table-respondents td:nth-child(2){
       font-size: 11px;
     }
   }
 
-  /* Option badges smaller */
-  .opt{ min-width:30px; padding:4px 7px; font-size:12px; }
+  .opt{
+    min-width: 2.1em;
+    padding: 4px 6px;
+    font-size:12px;
+  }
 }
 
 /* Dialog */
