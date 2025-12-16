@@ -21,8 +21,8 @@
 
 *{box-sizing:border-box}
 html,body{height:100%}
-
 html{background:var(--bg);color:var(--text)}
+
 body{
   margin:0;
   min-height:100svh;
@@ -33,7 +33,7 @@ body{
   overflow-x: hidden;
 }
 
-/* fixed gradient background */
+/* fixed continuous background (no seam) */
 body::before{
   content:"";
   position: fixed;
@@ -68,6 +68,7 @@ body::after{
 .topbar-inner{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .title{font-weight:800;font-size:18px;letter-spacing:.2px}
 .sub{color:var(--muted);font-size:12px;margin-top:2px}
+
 .meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .badge{
   font-size:12px;color:var(--muted);
@@ -133,28 +134,46 @@ body::after{
 .table tfoot th,.table tfoot td{font-weight:800;background:rgba(18,24,39,.65)}
 .table tfoot tr{border-top:1px solid var(--line)}
 
-/* respondents fixed layout */
+/* ===== Respondents ===== */
 .table-respondents{table-layout:fixed;width:100%}
 .table-respondents thead th{white-space:nowrap}
 .table-respondents tbody td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* balanced widths */
+/* ✅ width balance update: Name wider, Lang narrower */
 .table-respondents th:nth-child(1),
 .table-respondents td:nth-child(1){
   width:4.6ch;text-align:right;font-variant-numeric:tabular-nums;padding-left:8px;padding-right:8px
 }
+
+/* Name gets more room (main change) */
+.table-respondents th:nth-child(2),
+.table-respondents td:nth-child(2){
+  width:auto;
+}
+
+/* Lang narrower */
 .table-respondents th:nth-child(3),
-.table-respondents td:nth-child(3){width:7.2ch;padding-left:8px;padding-right:8px}
+.table-respondents td:nth-child(3){
+  width:5.6ch;
+  padding-left:6px;
+  padding-right:6px;
+  text-align:left;
+}
+
+/* Q columns compact */
 .table-respondents th:nth-child(4),
 .table-respondents td:nth-child(4),
 .table-respondents th:nth-child(5),
 .table-respondents td:nth-child(5),
 .table-respondents th:nth-child(6),
 .table-respondents td:nth-child(6){
-  width:6.6ch;text-align:center;padding-left:6px;padding-right:6px
+  width:6.4ch;
+  text-align:center;
+  padding-left:6px;
+  padding-right:6px;
 }
 
-/* Name: link-like decoration */
+/* Name: link-like */
 .table-respondents td:nth-child(2){
   cursor:pointer;
   text-decoration: underline;
@@ -165,17 +184,15 @@ body::after{
 .table-respondents tbody tr:hover td:nth-child(2){
   text-decoration-color: rgba(110,168,254,.95);
 }
-.table-respondents td:nth-child(2):active{
-  opacity:.85;
-}
+.table-respondents td:nth-child(2):active{opacity:.85}
 
-/* filters row */
+/* filter row */
 .tr-filters th{
   background: rgba(18,24,39,.95);
   padding: 6px 6px;
 }
 
-/* iOS-friendly select + small chevron */
+/* iOS-friendly select */
 .filter-select{
   width:100%;
   min-height:36px;
@@ -204,9 +221,7 @@ body::after{
 }
 
 /* filter pills */
-.filters-bar{
-  display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px;
-}
+.filters-bar{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}
 .pill{
   display:inline-flex;align-items:center;gap:8px;
   padding:6px 10px;border-radius:999px;
@@ -251,16 +266,17 @@ body::after{
 
 .footer{margin:14px 0 30px;display:flex;justify-content:flex-end}
 
-/* mobile */
 @media (max-width:520px){
   .wrap{padding:12px}
   .title{font-size:17px}
   .badge{padding:7px 9px}
   .btn{padding:8px 11px}
   .table th,.table td{padding:8px 8px;font-size:12px}
+
   @supports (-webkit-touch-callout:none){
     .table-respondents td:nth-child(2){font-size:11px}
   }
+
   .filter-select{
     min-height:34px;
     padding:6px 9px;
