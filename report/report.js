@@ -1,21 +1,46 @@
 // ===============================
 // TSC Survey Report - report.js
 // - Respondents table: Q2/Q3/Q4 badges (A-H)
-// - Tap truncated Name => dialog shows full name
-// - Click headers (Lang/Q2/Q3/Q4) => sort (toggle asc/desc)
+// - Name tap => dialog shows full name
+// - Lang/Q2/Q3/Q4: FILTER (not sort)
+// - Filter UI + active filter pills
 // ===============================
 
 const CSV_URL = new URL("../data/survey.csv", location.href).toString();
 let charts = [];
 
-// ---------- Dialog elements ----------
+// Dialog
 const dlg = document.getElementById("nameDialog");
 const dlgNameText = document.getElementById("dlgNameText");
 const dlgCloseBtn = document.getElementById("dlgCloseBtn");
 
-// ---------- Sort state ----------
-let currentRespondents = [];
-let sortState = { key: null, dir: "asc" }; // dir: "asc" | "desc"
+// UI
+const elLastUpdated = document.getElementById("lastUpdated");
+const elRespondentCount = document.getElementById("respondentCount");
+const elBtnRefresh = document.getElementById("btnRefresh");
+
+const tblRespondentsBody = document.querySelector("#tblRespondents tbody");
+const tblRespondents = document.getElementById("tblRespondents");
+
+const tblQ2FirstBody = document.querySelector("#tblQ2First tbody");
+const tblQ3TimeBody  = document.querySelector("#tblQ3Time tbody");
+const tblQ4DayBody   = document.querySelector("#tblQ4Day tbody");
+const tblLangBody    = document.querySelector("#tblLang tbody");
+
+const elQ2FirstTotal = document.getElementById("q2FirstTotal");
+const elQ3TimeTotal  = document.getElementById("q3TimeTotal");
+const elQ4DayTotal   = document.getElementById("q4DayTotal");
+const elLangTotal    = document.getElementById("langTotal");
+
+const filterName = document.getElementById("filterName");
+const filterLang = document.getElementById("filterLang");
+const filterQ2   = document.getElementById("filterQ2");
+const filterQ3   = document.getElementById("filterQ3");
+const filterQ4   = document.getElementById("filterQ4");
+const btnResetFilters = document.getElementById("btnResetFilters");
+const activeFilters = document.getElementById("activeFilters");
+
+let allRespondents = [];
 
 const Q2_TIME_LABELS = {
   A: "A. Server Time 04:00 - 05:00",
@@ -69,30 +94,12 @@ const LANGUAGE_ORDER = [
   "en","de","nl","fr","ru","es","pt","it","zh-hans","ja","ko","zh-hant","ar","th","vi","tr","pl","ms","id"
 ];
 
-const elLastUpdated = document.getElementById("lastUpdated");
-const elRespondentCount = document.getElementById("respondentCount");
-const elBtnRefresh = document.getElementById("btnRefresh");
-
-const tblRespondents = document.getElementById("tblRespondents");
-const tblRespondentsBody = document.querySelector("#tblRespondents tbody");
-
-const tblQ2FirstBody = document.querySelector("#tblQ2First tbody");
-const tblQ3TimeBody  = document.querySelector("#tblQ3Time tbody");
-const tblQ4DayBody   = document.querySelector("#tblQ4Day tbody");
-const tblLangBody    = document.querySelector("#tblLang tbody");
-
-const elQ2FirstTotal = document.getElementById("q2FirstTotal");
-const elQ3TimeTotal  = document.getElementById("q3TimeTotal");
-const elQ4DayTotal   = document.getElementById("q4DayTotal");
-const elLangTotal    = document.getElementById("langTotal");
-
 function escapeHtml(s){
   return String(s ?? "").replace(/[&<>"']/g, m => ({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[m]));
 }
 
-/** remove BOM/zero-width/nbsp and trim */
 function normalizeText(x){
   let s = String(x ?? "");
   s = s.replace(/^\uFEFF/, "");
@@ -106,7 +113,6 @@ function parseTimestamp(ts){
   return Number.isFinite(t) ? t : 0;
 }
 
-/** Convert fullwidth A-Z to ASCII A-Z */
 function toAsciiLetter(ch){
   const code = ch.charCodeAt(0);
   if (code >= 0xFF21 && code <= 0xFF3A) return String.fromCharCode(code - 0xFF21 + 0x41);
@@ -114,14 +120,11 @@ function toAsciiLetter(ch){
   return ch;
 }
 
-// Extract leading A/B/C... from "A. xxx", "A xxx", "Ａ．xxx" etc.
 function extractLeadingLetter(value){
   const raw = normalizeText(value);
   if (!raw) return "";
-
   const first = toAsciiLetter(raw[0]);
   const rest = raw.slice(1);
-
   if (/^[A-Za-z]$/.test(first) && (/^[\.\s]/.test(rest) || rest.startsWith("．") || rest === "")){
     return first.toUpperCase();
   }
@@ -132,15 +135,12 @@ function extractLeadingLetter(value){
 function canonicalizeAnswer(value, labelMap){
   const s = normalizeText(value);
   if (!s) return "";
-
   const letter = extractLeadingLetter(s);
   if (letter && labelMap[letter]) return labelMap[letter];
-
   const normalized = s.replace(/\s+/g, " ").trim();
   const mapValues = Object.values(labelMap);
   const found = mapValues.find(v => v.replace(/\s+/g, " ").trim() === normalized);
   if (found) return found;
-
   return normalized;
 }
 
@@ -270,7 +270,6 @@ async function loadCSV(){
   return rows;
 }
 
-// Deduplicate by latest timestamp per player_name
 function dedupeLatestByPlayer(rows){
   const map = new Map();
   for (const r of rows){
@@ -278,7 +277,7 @@ function dedupeLatestByPlayer(rows){
     if (!name) continue;
     const ts = parseTimestamp(r.timestamp);
     const prev = map.get(name);
-    if (!prev || ts > prev._ts || (ts === prev._ts && prev._seq < r._seq)){
+    if (!prev || ts > prev._ts || (ts === prev._ts && (prev._seq ?? 0) < (r._seq ?? 0))){
       map.set(name, {
         timestamp: normalizeText(r.timestamp),
         language: normalizeText(r.language),
@@ -287,12 +286,12 @@ function dedupeLatestByPlayer(rows){
         Q3_time: normalizeText(r.Q3_time),
         Q4_day: normalizeText(r.Q4_day),
         _ts: ts,
-        _seq: r._seq,
+        _seq: r._seq ?? 0,
       });
     }
   }
   const arr = Array.from(map.values());
-  arr.sort((a,b) => (a._ts - b._ts) || (a._seq - b._seq));
+  arr.sort((a,b) => (a._ts - b._ts) || ((a._seq ?? 0) - (b._seq ?? 0)));
   return arr;
 }
 
@@ -339,94 +338,146 @@ function countLanguages(respondents){
   return out;
 }
 
-// ---------- Sorting ----------
-function getSortValue(r, key){
-  if (key === "no") return r.__no ?? 0;
-  if (key === "name") return (r.player_name || "").toLowerCase();
-  if (key === "lang") return (normalizeText(r.language).toLowerCase()) || "—";
-  if (key === "q2") return extractLeadingLetter(r.Q2_time) || "—";
-  if (key === "q3") return extractLeadingLetter(r.Q3_time) || "—";
-  if (key === "q4") return extractLeadingLetter(r.Q4_day) || "—";
-  return "";
-}
-
-function sortRespondents(arr){
-  const { key, dir } = sortState;
-  if (!key) return arr;
-
-  const mul = (dir === "asc") ? 1 : -1;
-  const copy = [...arr];
-  copy.sort((a,b) => {
-    const va = getSortValue(a, key);
-    const vb = getSortValue(b, key);
-
-    if (typeof va === "number" && typeof vb === "number") return (va - vb) * mul;
-
-    const sa = String(va ?? "");
-    const sb = String(vb ?? "");
-    const c = sa.localeCompare(sb, undefined, { numeric: true, sensitivity: "base" });
-    if (c !== 0) return c * mul;
-
-    // tie-breaker: keep stable by timestamp
-    return (a._ts - b._ts) * mul;
-  });
-  return copy;
-}
-
-function updateSortIndicators(){
-  const ths = tblRespondents.querySelectorAll("thead th.th-sort");
-  ths.forEach(th => {
-    th.classList.remove("is-asc","is-desc");
-    const k = th.getAttribute("data-sort");
-    if (k && k === sortState.key){
-      th.classList.add(sortState.dir === "asc" ? "is-asc" : "is-desc");
-    }
-  });
-}
-
-// ---------- Name dialog ----------
+// --------- Name dialog ----------
 function openNameDialog(fullName){
   if (!dlg) return;
   dlgNameText.textContent = fullName;
   if (typeof dlg.showModal === "function") dlg.showModal();
-  else alert(fullName); // fallback
+  else alert(fullName);
 }
-
 function isTruncated(el){
-  // If element content is overflowed
   return el && (el.scrollWidth > el.clientWidth + 1);
 }
 
-// ---------- Render respondents ----------
-function renderRespondentsTable(respondents){
+// --------- Filters ----------
+function getFilters(){
+  return {
+    name: normalizeText(filterName?.value || "").toLowerCase(),
+    lang: normalizeText(filterLang?.value || "").toLowerCase(),
+    q2: normalizeText(filterQ2?.value || "").toUpperCase(),
+    q3: normalizeText(filterQ3?.value || "").toUpperCase(),
+    q4: normalizeText(filterQ4?.value || "").toUpperCase(),
+  };
+}
+
+function applyFilters(rows){
+  const f = getFilters();
+  return rows.filter(r => {
+    if (f.name){
+      const n = (r.player_name || "").toLowerCase();
+      if (!n.includes(f.name)) return false;
+    }
+    if (f.lang){
+      const lc = normalizeText(r.language).toLowerCase();
+      if (lc !== f.lang) return false;
+    }
+    if (f.q2){
+      if (extractLeadingLetter(r.Q2_time) !== f.q2) return false;
+    }
+    if (f.q3){
+      if (extractLeadingLetter(r.Q3_time) !== f.q3) return false;
+    }
+    if (f.q4){
+      if (extractLeadingLetter(r.Q4_day) !== f.q4) return false;
+    }
+    return true;
+  });
+}
+
+function renderActiveFilterPills(){
+  if (!activeFilters) return;
+  activeFilters.innerHTML = "";
+
+  const f = getFilters();
+  const pills = [];
+
+  if (f.name) pills.push({ k:"Name", v: f.name, clear: () => (filterName.value="") });
+  if (f.lang) pills.push({ k:"Lang", v: f.lang, clear: () => (filterLang.value="") });
+  if (f.q2) pills.push({ k:"Q2", v: f.q2, clear: () => (filterQ2.value="") });
+  if (f.q3) pills.push({ k:"Q3", v: f.q3, clear: () => (filterQ3.value="") });
+  if (f.q4) pills.push({ k:"Q4", v: f.q4, clear: () => (filterQ4.value="") });
+
+  pills.forEach(p => {
+    const el = document.createElement("div");
+    el.className = "pill";
+    el.innerHTML = `<span class="k">${escapeHtml(p.k)}:</span> <b>${escapeHtml(String(p.v))}</b> <button class="x" type="button" aria-label="Remove filter">×</button>`;
+    el.querySelector(".x").addEventListener("click", () => {
+      p.clear();
+      refreshRespondentsOnly();
+    });
+    activeFilters.appendChild(el);
+  });
+}
+
+function resetFilters(){
+  if (filterName) filterName.value = "";
+  if (filterLang) filterLang.value = "";
+  if (filterQ2) filterQ2.value = "";
+  if (filterQ3) filterQ3.value = "";
+  if (filterQ4) filterQ4.value = "";
+  refreshRespondentsOnly();
+}
+
+function buildLangOptions(respondents){
+  if (!filterLang) return;
+  const counts = new Map();
+  respondents.forEach(r => {
+    const code = normalizeText(r.language).toLowerCase();
+    if (!code) return;
+    counts.set(code, (counts.get(code) || 0) + 1);
+  });
+
+  // Keep current selection
+  const current = filterLang.value;
+
+  // Clear
+  filterLang.innerHTML = `<option value="">All</option>`;
+
+  // Prefer known order, then others
+  const ordered = [];
+  LANGUAGE_ORDER.forEach(code => {
+    if (counts.has(code)) ordered.push(code);
+  });
+  const others = Array.from(counts.keys()).filter(c => !LANGUAGE_ORDER.includes(c)).sort();
+
+  [...ordered, ...others].forEach(code => {
+    const label = LANGUAGE_LABELS[code] || code;
+    const n = counts.get(code) || 0;
+    const opt = document.createElement("option");
+    opt.value = code;
+    opt.textContent = `${code} (${n})`;
+    opt.title = label;
+    filterLang.appendChild(opt);
+  });
+
+  // Restore selection if still exists
+  if (current) filterLang.value = current;
+}
+
+// --------- Rendering ----------
+function renderRespondentsTable(rows){
   tblRespondentsBody.innerHTML = "";
-  const sorted = sortRespondents(respondents);
 
-  sorted.forEach((r, idx) => {
+  rows.forEach((r, idx) => {
     const { code, label } = langDisplay(r.language);
-
     const q2L = extractLeadingLetter(r.Q2_time);
     const q3L = extractLeadingLetter(r.Q3_time);
     const q4L = extractLeadingLetter(r.Q4_day);
 
-    const tr = document.createElement("tr");
-
-    // keep original full name for dialog
     const fullName = r.player_name;
 
+    const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="num">${idx + 1}</td>
       <td class="cell-name" title="${escapeHtml(fullName)}">${escapeHtml(fullName)}</td>
       <td title="${escapeHtml(label)}">${escapeHtml(code)}</td>
-      <td data-letter="${escapeHtml(q2L)}">${optionBadge(q2L)}</td>
-      <td data-letter="${escapeHtml(q3L)}">${optionBadge(q3L)}</td>
-      <td data-letter="${escapeHtml(q4L)}">${optionBadge(q4L)}</td>
+      <td>${optionBadge(q2L)}</td>
+      <td>${optionBadge(q3L)}</td>
+      <td>${optionBadge(q4L)}</td>
     `;
 
-    // Name tap -> only when actually truncated (or always if you prefer)
     const nameCell = tr.querySelector(".cell-name");
     nameCell.addEventListener("click", () => {
-      // Open when truncated (ellipsis) OR long
       if (isTruncated(nameCell) || fullName.length >= 16){
         openNameDialog(fullName);
       }
@@ -435,18 +486,14 @@ function renderRespondentsTable(respondents){
     tblRespondentsBody.appendChild(tr);
   });
 
-  elRespondentCount.textContent = String(sorted.length);
-  updateSortIndicators();
+  elRespondentCount.textContent = String(rows.length);
 }
 
-// ---------- Render whole report ----------
-function renderReport(respondents){
+function renderChartsFrom(respondents){
   destroyCharts();
 
   const latest = respondents.reduce((m,r) => Math.max(m, r._ts || 0), 0);
   setUpdatedByLatestTimestamp(latest);
-
-  renderRespondentsTable(respondents);
 
   const q2Rows = countByLabel(respondents.map(r=>r.Q2_time), Q2_TIME_LABELS, ["A","B","C","D"]);
   fillTableGeneric(tblQ2FirstBody, q2Rows, elQ2FirstTotal);
@@ -465,24 +512,59 @@ function renderReport(respondents){
   makeBar("chartLang", langRows.map(x=>x[0]), langRows.map(x=>x[1]));
 }
 
+function refreshRespondentsOnly(){
+  const filtered = applyFilters(allRespondents);
+  renderActiveFilterPills();
+  renderRespondentsTable(filtered);
+
+  // charts are global totals (all respondents) のままにしたい場合は何もしない
+  // 「フィルター後の集計」にしたいなら次行をON:
+  // renderChartsFrom(filtered);
+}
+
+// --------- Setup ----------
 function setButtonBusy(isBusy){
   if (!elBtnRefresh) return;
   elBtnRefresh.disabled = isBusy;
   elBtnRefresh.textContent = isBusy ? "Loading..." : "Refresh";
 }
 
+function setupDialog(){
+  if (!dlg) return;
+  if (dlgCloseBtn) dlgCloseBtn.addEventListener("click", () => dlg.close());
+  dlg.addEventListener("click", (e) => {
+    const rect = dlg.getBoundingClientRect();
+    const inDialog = (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom);
+    if (!inDialog) dlg.close();
+  });
+}
+
+function setupFilters(){
+  const onChange = () => refreshRespondentsOnly();
+
+  if (filterName) filterName.addEventListener("input", onChange);
+  if (filterLang) filterLang.addEventListener("change", onChange);
+  if (filterQ2) filterQ2.addEventListener("change", onChange);
+  if (filterQ3) filterQ3.addEventListener("change", onChange);
+  if (filterQ4) filterQ4.addEventListener("change", onChange);
+
+  if (btnResetFilters) btnResetFilters.addEventListener("click", resetFilters);
+}
+
 async function refresh(){
   try{
     setButtonBusy(true);
+
     const rows = await loadCSV();
     rows.forEach((r, idx) => { r._seq = idx; });
+
     const respondents = dedupeLatestByPlayer(rows);
+    allRespondents = respondents;
 
-    // store original order number for sorting (if needed)
-    respondents.forEach((r, i) => { r.__no = i + 1; });
+    buildLangOptions(allRespondents);
+    resetFilters(); // renders table + pills
+    renderChartsFrom(allRespondents);
 
-    currentRespondents = respondents;
-    renderReport(currentRespondents);
   }catch(err){
     console.error(err);
     destroyCharts();
@@ -494,6 +576,8 @@ async function refresh(){
     tblQ4DayBody.innerHTML = "";
     tblLangBody.innerHTML = "";
 
+    if (activeFilters) activeFilters.innerHTML = "";
+
     elRespondentCount.textContent = "0";
     elQ2FirstTotal.textContent = "0";
     elQ3TimeTotal.textContent  = "0";
@@ -504,40 +588,8 @@ async function refresh(){
   }
 }
 
-// ---------- Wire up sorting ----------
-function setupHeaderSorting(){
-  const ths = tblRespondents.querySelectorAll("thead th.th-sort");
-  ths.forEach(th => {
-    th.addEventListener("click", () => {
-      const key = th.getAttribute("data-sort");
-      if (!key) return;
-
-      // If same key -> toggle direction, else set asc
-      if (sortState.key === key){
-        sortState.dir = (sortState.dir === "asc") ? "desc" : "asc";
-      }else{
-        sortState.key = key;
-        sortState.dir = "asc";
-      }
-      renderRespondentsTable(currentRespondents);
-    });
-  });
-}
-
-// ---------- Dialog close ----------
-function setupDialog(){
-  if (!dlg) return;
-  if (dlgCloseBtn) dlgCloseBtn.addEventListener("click", () => dlg.close());
-  dlg.addEventListener("click", (e) => {
-    // click outside content closes
-    const rect = dlg.getBoundingClientRect();
-    const inDialog = (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom);
-    if (!inDialog) dlg.close();
-  });
-}
-
-// ---------- Init ----------
+// Init
 if (elBtnRefresh) elBtnRefresh.addEventListener("click", refresh);
-setupHeaderSorting();
 setupDialog();
+setupFilters();
 refresh();
