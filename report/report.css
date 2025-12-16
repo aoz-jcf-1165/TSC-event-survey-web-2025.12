@@ -13,31 +13,41 @@
 *{box-sizing:border-box}
 html,body{height:100%}
 
-html{background:var(--bg);color:var(--text)}
+/* --- Important: avoid mobile "seam" by using a fixed background layer --- */
+html{
+  background: var(--bg);
+  color:var(--text);
+}
+
 body{
   margin:0;
-  min-height:100svh;
+  min-height:100svh; /* mobile safe viewport height */
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans", "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
-  background: transparent;
+  background: transparent; /* background handled by ::before */
   color:var(--text);
   position: relative;
   overflow-x: hidden;
 }
 
+/* Fixed gradient layer that covers the entire viewport (prevents repeat seams) */
 body::before{
   content:"";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
+
+  /* One continuous background */
   background:
     radial-gradient(1200px 600px at 10% 0%, rgba(110,168,254,.18), transparent 55%),
     radial-gradient(800px 500px at 90% 20%, rgba(130,87,229,.16), transparent 55%),
     var(--bg);
-  background-repeat:no-repeat;
-  background-size:cover;
+
+  background-repeat: no-repeat;
+  background-size: cover; /* ensures full coverage */
 }
 
+/* Optional very subtle overlay to hide any banding on some displays */
 body::after{
   content:"";
   position: fixed;
@@ -45,6 +55,7 @@ body::after{
   z-index: -1;
   pointer-events: none;
   background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.06));
+  mix-blend-mode: normal;
 }
 
 .wrap{max-width:1100px;margin:0 auto;padding:16px}
@@ -58,22 +69,42 @@ body::after{
   -webkit-backdrop-filter: blur(10px);
   border-bottom:1px solid var(--line);
 }
-.topbar-inner{display:flex;justify-content:space-between;align-items:center;gap:12px}
+
+.topbar-inner{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px
+}
+
 .title{font-weight:800;font-size:18px;letter-spacing:.2px}
 .sub{color:var(--muted);font-size:12px;margin-top:2px}
-.meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+.meta{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap
+}
 
 .badge{
-  font-size:12px;color:var(--muted);
-  padding:8px 10px;border:1px solid var(--line);
-  border-radius:999px;background:rgba(18,24,39,.55)
+  font-size:12px;
+  color:var(--muted);
+  padding:8px 10px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  background:rgba(18,24,39,.55)
 }
+
 .btn{
   border:1px solid var(--line);
   background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
   color:var(--text);
-  padding:9px 12px;border-radius:12px;cursor:pointer;
+  padding:9px 12px;
+  border-radius:12px;
+  cursor:pointer;
 }
+
 .btn:hover{border-color:rgba(110,168,254,.5)}
 .btn:disabled{opacity:.65;cursor:not-allowed}
 .btn.ghost{background:transparent}
@@ -84,6 +115,7 @@ body::after{
   gap:16px;
   align-items:start;
 }
+
 @media (max-width: 980px){
   .grid{grid-template-columns:1fr}
 }
@@ -95,11 +127,16 @@ body::after{
   box-shadow: var(--shadow);
   overflow:hidden;
 }
+
 .card-head{
   padding:14px 16px;
-  display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:10px;
   border-bottom:1px solid var(--line);
 }
+
 .card-head h2{margin:0;font-size:14px}
 .muted{color:var(--muted);font-size:12px}
 .card-body{padding:14px 16px}
@@ -113,14 +150,13 @@ body::after{
   grid-template-columns: 1fr 1.1fr;
   gap:14px;
 }
+
 @media (max-width: 720px){
   .split{grid-template-columns:1fr}
 }
 
-/* ------- tables ------- */
 .table-wrap{
   overflow:auto;
-  -webkit-overflow-scrolling: touch;
   border-radius:12px;
   border:1px solid var(--line);
   background:rgba(15,20,34,.55)
@@ -129,7 +165,7 @@ body::after{
 .table{
   width:100%;
   border-collapse:collapse;
-  min-width:320px;
+  min-width:320px
 }
 
 .table th,.table td{
@@ -138,13 +174,11 @@ body::after{
   font-size:13px
 }
 
-/* 既定：他の表は sticky のまま */
 .table thead th{
   position:sticky;
   top:0;
   background:rgba(18,24,39,.95);
-  text-align:left;
-  z-index:1;
+  text-align:left
 }
 
 .table td.num,.table th.num{text-align:right}
@@ -160,96 +194,39 @@ body::after{
   min-height:260px;
   display:flex;
 }
+
 .chart-wrap canvas{width:100% !important;height:100% !important}
+
 .footer{margin:14px 0 30px;display:flex;justify-content:flex-end}
 
-/* ================================
-   ✅ Respondents: “ヘッダー別テーブル”方式（Safari最強）
-   ================================ */
-.resp-wrap{display:flex;flex-direction:column;gap:0}
-
-/* ヘッダー側はスクロールしない（見た目だけ） */
-.head-wrap{overflow:hidden !important}
-
-/* ボディ側だけ横スクロール */
-.body-wrap{overflow:auto}
-
-/* 同じ見た目に */
-#tblRespondentsHead,
+/* ★ Respondents 表（Q2/Q3/Q4追加）: 列増加に備えて横幅を確保 */
 #tblRespondents{
-  min-width:560px;            /* 6列が潰れない */
-  table-layout:fixed;
+  min-width: 520px; /* 6列でも見切れにくく */
 }
 
-/* ★ Respondentsは sticky を使わない（Safari崩れ根絶） */
-#tblRespondentsHead thead th{position:static}
-#tblRespondents thead{display:none} /* body側にtheadは無いが念のため */
-
-/* Name: 1行固定 + … */
-#tblRespondentsHead th:nth-child(2),
-#tblRespondents td:nth-child(2){
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-/* center align Lang/Q */
-#tblRespondentsHead th:nth-child(3),
-#tblRespondents td:nth-child(3){text-align:center}
-#tblRespondentsHead th:nth-child(4),
-#tblRespondentsHead th:nth-child(5),
-#tblRespondentsHead th:nth-child(6),
+/* ★ Respondents 表: Q2/Q3/Q4 は中央寄せ + 少し強調 */
+#tblRespondents th:nth-child(4),
+#tblRespondents th:nth-child(5),
+#tblRespondents th:nth-child(6),
 #tblRespondents td:nth-child(4),
 #tblRespondents td:nth-child(5),
 #tblRespondents td:nth-child(6){
-  text-align:center;
-  font-weight:800;
-  letter-spacing:.3px;
+  text-align: center;  /* Q列はセンターが見やすい */
+  font-weight: 800;   /* 集計っぽく */
+  letter-spacing: .3px;
 }
 
-/* Name clickable */
-#tblRespondents td.name-cell{
-  cursor:pointer;
-  text-decoration: underline;
-  text-decoration-color: rgba(110,168,254,.5);
+/* ★ 既存の num 右寄せ指定より Q列センターを優先させる */
+#tblRespondents td:nth-child(4).num,
+#tblRespondents td:nth-child(5).num,
+#tblRespondents td:nth-child(6).num,
+#tblRespondents th:nth-child(4).num,
+#tblRespondents th:nth-child(5).num,
+#tblRespondents th:nth-child(6).num{
+  text-align: center;
 }
-#tblRespondents td.name-cell:hover{color:var(--accent)}
 
-/* Q color coding */
-.code{ font-weight:800; letter-spacing:.3px; }
-.code-A{ color:#6ea8fe; }
-.code-B{ color:#22c55e; }
-.code-C{ color:#facc15; }
-.code-D{ color:#fb923c; }
-.code-E{ color:#a78bfa; }
-.code-F{ color:#f472b6; }
-.code-G{ color:#38bdf8; }
-.code-H{ color:#9ca3af; }
-
-/* Modal */
-#nameModal{position:fixed;inset:0;display:none;z-index:1000}
-#nameModal.open{display:block}
-#nameModal .modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.65)}
-#nameModal .modal{
-  position:relative;
-  max-width:420px;
-  margin:20vh auto 0;
-  background:linear-gradient(180deg, rgba(18,24,39,.98), rgba(15,20,34,.98));
-  border:1px solid var(--line);
-  border-radius:16px;
-  box-shadow:var(--shadow);
-  padding:16px;
-}
-.modal-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
-.modal-head h3{margin:0;font-size:14px}
-.modal-close{
-  background:none;border:none;color:var(--muted);
-  font-size:20px;line-height:1;cursor:pointer;padding:0 6px
-}
-.modal-close:hover{color:var(--text)}
-.modal-body{font-size:16px;word-break:break-all;padding-top:6px}
-
-/* Print */
+/* Print/PDF */
 @media print{
   body::before, body::after { display:none !important; }
   .topbar,.btn{display:none !important}
@@ -258,4 +235,3 @@ body::after{
   .card{box-shadow:none;border:1px solid #ddd}
   .table-wrap{border:1px solid #ddd}
 }
-
