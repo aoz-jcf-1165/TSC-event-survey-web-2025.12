@@ -39,6 +39,18 @@ jobs:
               'Q4_day',
             ];
 
+            const ALLOWED_LANGS = new Set([
+              "en","de","nl","fr","ru","es","pt","it","zh-hans","ja","ko","zh-hant","ar","th","vi","tr","pl","ms","id"
+            ]);
+
+            function normalizeLang(v) {
+              const s = (v == null ? '' : String(v)).trim().toLowerCase();
+              if (!s) return 'en';
+              if (s === 'zh') return 'zh-hans';
+              if (!ALLOWED_LANGS.has(s)) return 'en';
+              return s;
+            }
+
             function escapeCSV(value) {
               if (value == null) return '';
               const s = String(value);
@@ -46,7 +58,6 @@ jobs:
               return s;
             }
 
-            // 最低限のCSVパーサ（ダブルクォート対応）
             function parseCsvLine(line) {
               const out = [];
               let cur = '';
@@ -83,10 +94,9 @@ jobs:
                 }
               }
 
-              // 互換吸収（ここが重要）
               const rowObject = {
                 timestamp: map['timestamp'] || '',
-                language: map['language'] || '',
+                language: normalizeLang(map['language']),
                 player_name: map['player_name'] || '',
                 Q2_time:
                   map['Q2_time'] ||
@@ -126,12 +136,11 @@ jobs:
               const content = fs.readFileSync(csvPath, 'utf8');
               const lines = content.split(/\r?\n/).filter(l => l.trim() !== '');
               if (lines.length >= 1) {
-                // 1行目はヘッダ想定
                 for (let i = 1; i < lines.length; i++) {
                   const cols = parseCsvLine(lines[i]);
                   existingRows.push({
                     timestamp: cols[0] || '',
-                    language: cols[1] || '',
+                    language: normalizeLang(cols[1] || ''),
                     player_name: cols[2] || '',
                     Q2_time: cols[3] || '',
                     Q3_time: cols[4] || '',
@@ -141,7 +150,6 @@ jobs:
               }
             }
 
-            // 同一playerは上書き（古いのを削除）
             const mapByPlayer = new Map();
             for (const r of existingRows) {
               if (!r.player_name) continue;
@@ -181,7 +189,6 @@ jobs:
 
           git commit -m "Update survey.csv from issue #${{ github.event.issue.number }}"
 
-          # rebaseしてpush（競合時は数回リトライ）
           for i in 1 2 3 4 5; do
             git pull --rebase origin "$BRANCH" || true
             if git push origin HEAD:"$BRANCH"; then
