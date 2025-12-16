@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>TSC Event Survey - Report</title>
 
-  <!-- cache busting（更新ごとに末尾を変えてください） -->
-  <link rel="stylesheet" href="./report.css?v=20251217b" />
-
+  <!-- cache busting -->
+  <link rel="stylesheet" href="./report.css?v=20251217c" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -50,7 +49,7 @@
                   <th>Q4</th>
                 </tr>
 
-                <!-- Filters row (Reset / Search name は削除済み) -->
+                <!-- Filters row -->
                 <tr class="tr-filters">
                   <th></th>
                   <th></th>
@@ -64,22 +63,18 @@
                   <th>
                     <select class="filter-select" id="filterQ2">
                       <option value="">All</option>
-                      <option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option>
                     </select>
                   </th>
 
                   <th>
                     <select class="filter-select" id="filterQ3">
                       <option value="">All</option>
-                      <option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option><option value="E">E</option>
                     </select>
                   </th>
 
                   <th>
                     <select class="filter-select" id="filterQ4">
                       <option value="">All</option>
-                      <option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option>
-                      <option value="E">E</option><option value="F">F</option><option value="G">G</option><option value="H">H</option>
                     </select>
                   </th>
                 </tr>
@@ -89,7 +84,7 @@
           </div>
 
           <div class="hint">
-            Use filters (Lang / Q2 / Q3 / Q4) to narrow results. Tap a truncated player name to view full text.
+            Use filters (Lang / Q2 / Q3 / Q4) to narrow results. Tap a player name (link style) to view the full text.
           </div>
         </div>
       </details>
@@ -191,6 +186,6 @@
     <div class="dialog-body" id="dlgNameText"></div>
   </dialog>
 
-  <script src="./report.js?v=20251217b"></script>
+  <script src="./report.js?v=20251217c"></script>
 </body>
 </html>
