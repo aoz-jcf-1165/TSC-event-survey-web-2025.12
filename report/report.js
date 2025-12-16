@@ -85,19 +85,12 @@ function parseTimestamp(ts){
   const t = Date.parse(ts);
   return Number.isFinite(t) ? t : 0;
 }
-
-// ★ ドット前(または先頭の英字)を抽出して A/B/C... に統一
 function extractLeadingLetter(value){
   const s = safeTrim(value);
   if (!s) return "";
   const m = s.match(/^([A-Za-z])(?:[\.\s]|$)/);
   return m ? m[1].toUpperCase() : "";
 }
-function displayAnswerCode(value){
-  const code = extractLeadingLetter(value);
-  return code || "-";
-}
-
 function canonicalizeAnswer(value, labelMap){
   const s = safeTrim(value);
   if (!s) return "";
@@ -111,7 +104,6 @@ function canonicalizeAnswer(value, labelMap){
 
   return normalized;
 }
-
 function langDisplay(langCodeRaw){
   const code = safeTrim(langCodeRaw).toLowerCase();
   const label = LANGUAGE_LABELS[code] || (code ? code : "—");
@@ -203,20 +195,11 @@ function fillRespondents(respondents){
   tblRespondentsBody.innerHTML = "";
   respondents.forEach((r, idx) => {
     const { code, label } = langDisplay(r.language);
-
-    const q2Code = displayAnswerCode(r.Q2_time);
-    const q3Code = displayAnswerCode(r.Q3_time);
-    const q4Code = displayAnswerCode(r.Q4_day);
-
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="num">${idx + 1}</td>
       <td>${escapeHtml(r.player_name)}</td>
-      <td class="num" title="${escapeHtml(label)}">${escapeHtml(code)}</td>
-
-      <td class="num" title="${escapeHtml(safeTrim(r.Q2_time) || "-")}">${escapeHtml(q2Code)}</td>
-      <td class="num" title="${escapeHtml(safeTrim(r.Q3_time) || "-")}">${escapeHtml(q3Code)}</td>
-      <td class="num" title="${escapeHtml(safeTrim(r.Q4_day) || "-")}">${escapeHtml(q4Code)}</td>
+      <td title="${escapeHtml(label)}">${escapeHtml(code)}</td>
     `;
     tblRespondentsBody.appendChild(tr);
   });
