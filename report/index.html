@@ -32,16 +32,24 @@
         <div class="card-body">
           <div class="table-wrap">
             <table class="table" id="tblRespondents">
+              <!-- ★ Safari安定化：列幅を明示 -->
+              <colgroup>
+                <col style="width:56px">
+                <col>
+                <col style="width:72px">
+                <col style="width:56px">
+                <col style="width:56px">
+                <col style="width:56px">
+              </colgroup>
+
               <thead>
                 <tr>
-                  <th style="width:56px;" class="num">No</th>
+                  <th class="num">No</th>
                   <th>Name</th>
-                  <th style="width:72px;" class="num">Lang</th>
-
-                  <!-- ★ 追加 -->
-                  <th style="width:56px;" class="num">Q2</th>
-                  <th style="width:56px;" class="num">Q3</th>
-                  <th style="width:56px;" class="num">Q4</th>
+                  <th class="num">Lang</th>
+                  <th class="num">Q2</th>
+                  <th class="num">Q3</th>
+                  <th class="num">Q4</th>
                 </tr>
               </thead>
               <tbody><!-- injected --></tbody>
@@ -56,7 +64,6 @@
 
     <!-- Right: Sections -->
     <section class="maincol">
-      <!-- Card template: Table + Chart -->
       <section class="card">
         <div class="card-head">
           <h2>Polar Invasion / Wasteland Showdown</h2>
@@ -72,9 +79,7 @@
               </table>
             </div>
           </div>
-          <div class="chart-wrap">
-            <canvas id="chartQ2First"></canvas>
-          </div>
+          <div class="chart-wrap"><canvas id="chartQ2First"></canvas></div>
         </div>
       </section>
 
@@ -91,9 +96,7 @@
               <tfoot><tr><th>Total</th><th class="num" id="q3TimeTotal">0</th></tr></tfoot>
             </table>
           </div>
-          <div class="chart-wrap">
-            <canvas id="chartQ3Time"></canvas>
-          </div>
+          <div class="chart-wrap"><canvas id="chartQ3Time"></canvas></div>
         </div>
       </section>
 
@@ -110,9 +113,7 @@
               <tfoot><tr><th>Total</th><th class="num" id="q4DayTotal">0</th></tr></tfoot>
             </table>
           </div>
-          <div class="chart-wrap">
-            <canvas id="chartQ4Day"></canvas>
-          </div>
+          <div class="chart-wrap"><canvas id="chartQ4Day"></canvas></div>
         </div>
       </section>
 
@@ -129,9 +130,7 @@
               <tfoot><tr><th>Total</th><th class="num" id="langTotal">0</th></tr></tfoot>
             </table>
           </div>
-          <div class="chart-wrap">
-            <canvas id="chartLang"></canvas>
-          </div>
+          <div class="chart-wrap"><canvas id="chartLang"></canvas></div>
         </div>
       </section>
 
