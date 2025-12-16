@@ -22,67 +22,94 @@
 *{box-sizing:border-box}
 html,body{height:100%}
 
-html{background:var(--bg);color:var(--text)}
+html{
+  background: var(--bg);
+  color:var(--text);
+}
+
 body{
   margin:0;
   min-height:100svh;
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans", "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
-  background:transparent;
+  background: transparent;
   color:var(--text);
-  position:relative;
-  overflow-x:hidden;
+  position: relative;
+  overflow-x: hidden;
 }
 
+/* fixed continuous background (no seam) */
 body::before{
   content:"";
-  position:fixed; inset:0;
-  z-index:-1;
-  pointer-events:none;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background:
     radial-gradient(1200px 600px at 10% 0%, rgba(110,168,254,.18), transparent 55%),
     radial-gradient(800px 500px at 90% 20%, rgba(130,87,229,.16), transparent 55%),
     var(--bg);
-  background-repeat:no-repeat;
-  background-size:cover;
+  background-repeat: no-repeat;
+  background-size: cover;
 }
 body::after{
   content:"";
-  position:fixed; inset:0;
-  z-index:-1;
-  pointer-events:none;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.06));
+  mix-blend-mode: normal;
 }
 
 .wrap{max-width:1100px;margin:0 auto;padding:16px}
 
 .topbar{
-  position:sticky; top:0; z-index:10;
+  position:sticky;
+  top:0;
+  z-index:10;
   background:rgba(11,14,20,.72);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-bottom:1px solid var(--line);
 }
+
 .topbar-inner{
-  display:flex; justify-content:space-between; align-items:center; gap:12px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px
 }
+
 .title{font-weight:800;font-size:18px;letter-spacing:.2px}
 .sub{color:var(--muted);font-size:12px;margin-top:2px}
-.meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.badge{
-  font-size:12px;color:var(--muted);
-  padding:8px 10px;border:1px solid var(--line);
-  border-radius:999px;background:rgba(18,24,39,.55)
+
+.meta{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap
 }
+
+.badge{
+  font-size:12px;
+  color:var(--muted);
+  padding:8px 10px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  background:rgba(18,24,39,.55)
+}
+
 .btn{
   border:1px solid var(--line);
   background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
   color:var(--text);
-  padding:9px 12px;border-radius:12px;cursor:pointer;
+  padding:9px 12px;
+  border-radius:12px;
+  cursor:pointer;
 }
 .btn:hover{border-color:rgba(110,168,254,.5)}
 .btn:disabled{opacity:.65;cursor:not-allowed}
 .btn.ghost{background:transparent}
-.btn.tiny{padding:6px 9px;border-radius:10px;font-size:12px}
 
 .grid{
   display:grid;
@@ -90,7 +117,9 @@ body::after{
   gap:16px;
   align-items:start;
 }
-@media (max-width: 980px){ .grid{grid-template-columns:1fr} }
+@media (max-width: 980px){
+  .grid{grid-template-columns:1fr}
+}
 
 .card{
   background: linear-gradient(180deg, rgba(18,24,39,.92), rgba(15,20,34,.92));
@@ -99,11 +128,16 @@ body::after{
   box-shadow: var(--shadow);
   overflow:hidden;
 }
+
 .card-head{
   padding:14px 16px;
-  display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:10px;
   border-bottom:1px solid var(--line);
 }
+
 .card-head h2{margin:0;font-size:14px}
 .muted{color:var(--muted);font-size:12px}
 .card-body{padding:14px 16px}
@@ -112,8 +146,14 @@ body::after{
 .side details > summary{list-style:none;cursor:pointer}
 .side summary::-webkit-details-marker{display:none}
 
-.split{display:grid;grid-template-columns: 1fr 1.1fr;gap:14px}
-@media (max-width: 720px){ .split{grid-template-columns:1fr} }
+.split{
+  display:grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap:14px;
+}
+@media (max-width: 720px){
+  .split{grid-template-columns:1fr}
+}
 
 .table-wrap{
   overflow:auto;
@@ -121,31 +161,32 @@ body::after{
   border:1px solid var(--line);
   background:rgba(15,20,34,.55)
 }
+
 .table{
   width:100%;
   border-collapse:collapse;
   min-width:0;
 }
+
 .table th,.table td{
   padding:10px 12px;
   border-bottom:1px solid rgba(35,44,68,.7);
   font-size:13px
 }
+
 .table thead th{
-  position:sticky; top:0;
+  position:sticky;
+  top:0;
   background:rgba(18,24,39,.95);
   text-align:left
 }
+
 .table td.num,.table th.num{text-align:right}
 .table tbody tr:hover{background:rgba(110,168,254,.06)}
 .table tfoot th,.table tfoot td{font-weight:800;background:rgba(18,24,39,.65)}
 .table tfoot tr{border-top:1px solid var(--line)}
 
-/* ================================
-   Respondents table: balanced widths
-   - "余力がある"見た目にするため、No/Lang/Qを少し広げる
-   - Name は残りを使う
-   ================================ */
+/* ===== Respondents balanced columns ===== */
 .table-respondents{
   table-layout: fixed;
   width: 100%;
@@ -161,18 +202,20 @@ body::after{
   text-overflow: ellipsis;
 }
 
-/* Column widths (balanced + still compact) */
+/* Balance with more “余力” */
 .table-respondents th:nth-child(1),
 .table-respondents td:nth-child(1){
-  width: 4.2ch;                /* No が 3桁でも余裕 */
+  width: 4.6ch;
   text-align:right;
   font-variant-numeric: tabular-nums;
-  padding-left:8px; padding-right:8px;
+  padding-left:8px;
+  padding-right:8px;
 }
 .table-respondents th:nth-child(3),
 .table-respondents td:nth-child(3){
-  width: 6.6ch;                /* "Lang" をゆったり */
-  padding-left:8px; padding-right:8px;
+  width: 7.2ch;
+  padding-left:8px;
+  padding-right:8px;
 }
 .table-respondents th:nth-child(4),
 .table-respondents td:nth-child(4),
@@ -180,52 +223,53 @@ body::after{
 .table-respondents td:nth-child(5),
 .table-respondents th:nth-child(6),
 .table-respondents td:nth-child(6){
-  width: 6.0ch;                /* Q列に余白を出す */
+  width: 6.6ch;
   text-align:center;
-  padding-left:6px; padding-right:6px;
+  padding-left:6px;
+  padding-right:6px;
 }
-.table-respondents th:nth-child(2),
 .table-respondents td:nth-child(2){
-  width: auto;
+  cursor:pointer;
 }
 
-/* Name tap */
-.table-respondents td:nth-child(2){ cursor:pointer; }
-
-/* Header filter icon */
-.th-filter{ user-select:none; }
-.th-icon{ opacity:.75; margin-left:4px; font-size:12px; }
-
-/* Filter row style */
+/* filter row */
 .tr-filters th{
-  position:sticky;
-  top: 34px; /* sticks right under first header row */
-  background:rgba(18,24,39,.90);
-  border-bottom:1px solid rgba(35,44,68,.7);
-  padding:8px 10px;
-}
-@media (max-width: 520px){
-  .tr-filters th{ top: 32px; }
+  background: rgba(18,24,39,.95);
+  padding: 6px 6px;
 }
 
-/* Controls */
-.input, .select{
+/* iOS Safari friendly select (no big icons, no clipping) */
+.filter-select{
   width:100%;
+  min-height:36px;
+  padding:6px 10px;
+  font-size:13px;
+  line-height:1.4;
   color:var(--text);
-  background:rgba(15,20,34,.75);
-  border:1px solid rgba(35,44,68,.85);
+  background:rgba(15,20,34,.85);
+  border:1px solid rgba(35,44,68,.9);
   border-radius:10px;
   outline:none;
+
+  appearance:none;
+  -webkit-appearance:none;
+
+  /* small chevron */
+  background-image:
+    linear-gradient(45deg, transparent 50%, #9aa6bf 50%),
+    linear-gradient(135deg, #9aa6bf 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 14px,
+    calc(100% - 9px) 14px;
+  background-size:5px 5px;
+  background-repeat:no-repeat;
 }
-.input{ padding:8px 10px; }
-.select{ padding:8px 10px; }
-.input:focus, .select:focus{
+.filter-select:focus{
   border-color: rgba(110,168,254,.55);
   box-shadow: 0 0 0 2px rgba(110,168,254,.10);
 }
-.input.tiny, .select.tiny{ padding:7px 9px; font-size:12px; border-radius:10px; }
 
-/* Active filter pills */
+/* active filter pills */
 .filters-bar{
   display:flex;
   gap:8px;
@@ -255,7 +299,7 @@ body::after{
 }
 .pill .x:hover{ color: var(--text); }
 
-/* Option badge */
+/* option badge */
 .opt{
   display:inline-flex;
   align-items:center;
@@ -292,7 +336,7 @@ body::after{
 
 .footer{margin:14px 0 30px;display:flex;justify-content:flex-end}
 
-/* Mobile tightening */
+/* Mobile */
 @media (max-width: 520px){
   .wrap{padding:12px}
   .title{font-size:17px}
@@ -301,11 +345,18 @@ body::after{
 
   .table th,.table td{ padding:8px 8px; font-size:12px; }
 
-  /* Slightly smaller Name on iOS for long names */
   @supports (-webkit-touch-callout: none){
     .table-respondents td:nth-child(2){ font-size:11px; }
   }
 
+  .filter-select{
+    min-height:34px;
+    padding:6px 9px;
+    font-size:12px;
+    background-position:
+      calc(100% - 14px) 13px,
+      calc(100% - 9px) 13px;
+  }
   .opt{ min-width:2.1em; padding:4px 6px; }
 }
 
