@@ -2,8 +2,9 @@
 // TSC Survey Report - report.js
 // - Respondents: No / Name / Lang / Q2 / Q3 / Q4
 // - Filters: Lang / Q2 / Q3 / Q4
-// - Each filter shows option counts: "A (12)", "en (18)" etc.
-// - Name cell styled like link; tap -> dialog shows full name
+// - ✅ Option counts reflect CURRENT other filter selections
+//    (e.g., when Q2=B selected, Lang list shows counts after applying Q2=B)
+// - Name styled link-like; tap -> dialog
 // - Charts remain overall totals (not filtered)
 // ===============================
 
@@ -166,10 +167,7 @@ function parseCSV(text){
   return data;
 }
 
-function destroyCharts(){
-  charts.forEach(c => c.destroy());
-  charts = [];
-}
+function destroyCharts(){ charts.forEach(c => c.destroy()); charts = []; }
 function makeBar(canvasId, labels, values){
   const ctx = document.getElementById(canvasId);
   const c = new Chart(ctx, {
@@ -295,11 +293,19 @@ function openNameDialog(fullName){
   if (typeof dlg.showModal === "function") dlg.showModal();
   else alert(fullName);
 }
+function setupDialog(){
+  if (dlgCloseBtn) dlgCloseBtn.addEventListener("click", () => dlg.close());
+  dlg.addEventListener("click", (e) => {
+    const rect = dlg.getBoundingClientRect();
+    const inDialog = (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom);
+    if (!inDialog) dlg.close();
+  });
+}
 function isTruncated(el){
   return el && (el.scrollWidth > el.clientWidth + 1);
 }
 
-// ===== Filters (with counts) =====
+// ===== Filters =====
 function getFilters(){
   return {
     lang: normalizeText(filterLang.value).toLowerCase(),
@@ -309,16 +315,26 @@ function getFilters(){
   };
 }
 
-function applyFilters(rows){
+/**
+ * Apply filters; if excludeKey is provided, do not apply that one.
+ * excludeKey: "lang" | "q2" | "q3" | "q4" | null
+ */
+function applyFiltersWithExclusion(rows, excludeKey=null){
   const f = getFilters();
   return rows.filter(r => {
-    if (f.lang){
+    if (excludeKey !== "lang" && f.lang){
       const lc = normalizeText(r.language).toLowerCase();
       if (lc !== f.lang) return false;
     }
-    if (f.q2 && extractLeadingLetter(r.Q2_time) !== f.q2) return false;
-    if (f.q3 && extractLeadingLetter(r.Q3_time) !== f.q3) return false;
-    if (f.q4 && extractLeadingLetter(r.Q4_day) !== f.q4) return false;
+    if (excludeKey !== "q2" && f.q2){
+      if (extractLeadingLetter(r.Q2_time) !== f.q2) return false;
+    }
+    if (excludeKey !== "q3" && f.q3){
+      if (extractLeadingLetter(r.Q3_time) !== f.q3) return false;
+    }
+    if (excludeKey !== "q4" && f.q4){
+      if (extractLeadingLetter(r.Q4_day) !== f.q4) return false;
+    }
     return true;
   });
 }
@@ -346,71 +362,74 @@ function renderActiveFilterPills(){
   });
 }
 
-function buildSelectWithCounts(selectEl, values, order){
-  // Keep current selected value
+function buildSelectOptionsWithCounts(selectEl, key, items, order){
+  // key: "lang" | "q2" | "q3" | "q4"
   const current = normalizeText(selectEl.value);
 
   const counts = new Map();
-  values.forEach(v => {
+  items.forEach(v => {
     if (!v) return;
     counts.set(v, (counts.get(v) || 0) + 1);
   });
 
-  // Build options
   selectEl.innerHTML = `<option value="">All</option>`;
 
-  const addOpt = (val, label) => {
+  const addOpt = (val) => {
     const opt = document.createElement("option");
     opt.value = val;
-    opt.textContent = label;
+    opt.textContent = `${val} (${counts.get(val) || 0})`;
     selectEl.appendChild(opt);
   };
 
   if (order && order.length){
     order.forEach(v => {
-      const n = counts.get(v) || 0;
-      if (n > 0) addOpt(v, `${v} (${n})`);
+      if ((counts.get(v) || 0) > 0) addOpt(v);
     });
-    // extras
     const extras = Array.from(counts.keys()).filter(v => !order.includes(v)).sort();
-    extras.forEach(v => addOpt(v, `${v} (${counts.get(v)})`));
+    extras.forEach(v => addOpt(v));
   } else {
-    Array.from(counts.keys()).sort().forEach(v => addOpt(v, `${v} (${counts.get(v)})`));
+    Array.from(counts.keys()).sort().forEach(v => addOpt(v));
   }
 
-  // Restore selection if still exists
   if (current && Array.from(selectEl.options).some(o => o.value === current)){
     selectEl.value = current;
   }
 }
 
-function rebuildAllFilterOptionsFrom(respondents){
-  // Lang
-  const langCodes = respondents
+/**
+ * ✅ Rebuild filter option lists where counts reflect other filters.
+ * Example:
+ * - Lang dropdown counts are computed from rows filtered by (q2,q3,q4) only (exclude lang)
+ * - Q2 dropdown counts are computed from rows filtered by (lang,q3,q4) only (exclude q2)
+ */
+function rebuildDynamicFilterCounts(){
+  // Base sets per dropdown
+  const baseForLang = applyFiltersWithExclusion(allRespondents, "lang");
+  const baseForQ2   = applyFiltersWithExclusion(allRespondents, "q2");
+  const baseForQ3   = applyFiltersWithExclusion(allRespondents, "q3");
+  const baseForQ4   = applyFiltersWithExclusion(allRespondents, "q4");
+
+  // Lang values (codes)
+  const langCodes = baseForLang
     .map(r => normalizeText(r.language).toLowerCase())
     .filter(Boolean);
 
-  // q letters
-  const q2Letters = respondents.map(r => extractLeadingLetter(r.Q2_time)).filter(Boolean);
-  const q3Letters = respondents.map(r => extractLeadingLetter(r.Q3_time)).filter(Boolean);
-  const q4Letters = respondents.map(r => extractLeadingLetter(r.Q4_day)).filter(Boolean);
+  // Determine order for lang (LANGUAGE_ORDER then others)
+  const uniqLang = Array.from(new Set(langCodes));
+  const ordered = [];
+  LANGUAGE_ORDER.forEach(code => { if (uniqLang.includes(code)) ordered.push(code); });
+  const others = uniqLang.filter(c => !LANGUAGE_ORDER.includes(c)).sort();
+  const langOrder = [...ordered, ...others];
 
-  // Lang (ordered)
-  // create language order list present
-  const orderLang = [];
-  LANGUAGE_ORDER.forEach(code => { if (langCodes.includes(code)) orderLang.push(code); });
-  const others = Array.from(new Set(langCodes)).filter(c => !LANGUAGE_ORDER.includes(c)).sort();
-  const finalLangOrder = [...orderLang, ...others];
+  // Q letters
+  const q2Letters = baseForQ2.map(r => extractLeadingLetter(r.Q2_time)).filter(Boolean);
+  const q3Letters = baseForQ3.map(r => extractLeadingLetter(r.Q3_time)).filter(Boolean);
+  const q4Letters = baseForQ4.map(r => extractLeadingLetter(r.Q4_day)).filter(Boolean);
 
-  buildSelectWithCounts(
-    filterLang,
-    langCodes,
-    finalLangOrder
-  );
-
-  buildSelectWithCounts(filterQ2, q2Letters, ["A","B","C","D"]);
-  buildSelectWithCounts(filterQ3, q3Letters, ["A","B","C","D","E"]);
-  buildSelectWithCounts(filterQ4, q4Letters, ["A","B","C","D","E","F","G","H"]);
+  buildSelectOptionsWithCounts(filterLang, "lang", langCodes, langOrder);
+  buildSelectOptionsWithCounts(filterQ2, "q2", q2Letters, ["A","B","C","D"]);
+  buildSelectOptionsWithCounts(filterQ3, "q3", q3Letters, ["A","B","C","D","E"]);
+  buildSelectOptionsWithCounts(filterQ4, "q4", q4Letters, ["A","B","C","D","E","F","G","H"]);
 }
 
 // ===== Respondents rendering =====
@@ -436,7 +455,7 @@ function renderRespondentsTable(rows){
 
     const nameCell = tr.querySelector(".cell-name");
     nameCell.addEventListener("click", () => {
-      // always open (but keep it natural: only when it feels necessary)
+      // show full name on tap; underline already indicates clickable
       if (isTruncated(nameCell) || fullName.length >= 10){
         openNameDialog(fullName);
       } else {
@@ -451,12 +470,17 @@ function renderRespondentsTable(rows){
 }
 
 function refreshRespondentsOnly(){
-  const filtered = applyFilters(allRespondents);
+  // 1) rebuild dynamic counts (depends on current filter selections)
+  rebuildDynamicFilterCounts();
+
+  // 2) apply all filters for actual list
+  const filtered = applyFiltersWithExclusion(allRespondents, null);
+
+  // 3) render
   renderActiveFilterPills();
   renderRespondentsTable(filtered);
 
-  // グラフを「フィルター後」にしたいなら下をON
-  // renderChartsFrom(filtered);
+  // charts are kept overall totals by design
 }
 
 // ===== Charts =====
@@ -490,15 +514,6 @@ function setButtonBusy(isBusy){
 }
 
 // ===== Setup =====
-function setupDialog(){
-  if (dlgCloseBtn) dlgCloseBtn.addEventListener("click", () => dlg.close());
-  dlg.addEventListener("click", (e) => {
-    const rect = dlg.getBoundingClientRect();
-    const inDialog = (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom);
-    if (!inDialog) dlg.close();
-  });
-}
-
 function setupFilters(){
   const onChange = () => refreshRespondentsOnly();
   filterLang.addEventListener("change", onChange);
@@ -516,13 +531,10 @@ async function refresh(){
 
     allRespondents = dedupeLatestByPlayer(rows);
 
-    // Build ALL filter options with counts (Lang + Q2/Q3/Q4)
-    rebuildAllFilterOptionsFrom(allRespondents);
-
-    // Render respondents with current filters
+    // initial build (dynamic counts + list)
     refreshRespondentsOnly();
 
-    // Charts are overall totals
+    // charts overall totals
     renderChartsFrom(allRespondents);
 
   }catch(err){
@@ -535,8 +547,13 @@ async function refresh(){
     tblQ3TimeBody.innerHTML = "";
     tblQ4DayBody.innerHTML = "";
     tblLangBody.innerHTML = "";
-
     if (activeFilters) activeFilters.innerHTML = "";
+
+    // reset dropdowns safely
+    filterLang.innerHTML = `<option value="">All</option>`;
+    filterQ2.innerHTML   = `<option value="">All</option>`;
+    filterQ3.innerHTML   = `<option value="">All</option>`;
+    filterQ4.innerHTML   = `<option value="">All</option>`;
 
     elRespondentCount.textContent = "0";
     elQ2FirstTotal.textContent = "0";
