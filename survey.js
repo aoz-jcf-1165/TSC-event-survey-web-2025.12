@@ -1,5 +1,6 @@
-// ==== Cloudflare Worker API エンドポイント ====
-const API_URL = "https://tsc-survey-api.aozjakz01.workers.dev/";
+// ==== Cloudflare Pages Functions API エンドポイント ====
+// ★同一ドメイン化：workers.dev を叩かず /api/submit を叩く
+const API_URL = "/api/submit";
 
 // ==== 多言語翻訳設定 ====
 const TRANSLATION_FILE = "translations.tsv";
@@ -265,7 +266,7 @@ async function handleSubmit(e) {
     });
 
     if (!res.ok) {
-      console.error("Worker error:", res.status, await res.text());
+      console.error("API error:", res.status, await res.text());
       setError("form-error", "Server error. Please try again later.");
       setFormDisabled(false);
       return;
