@@ -19,7 +19,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Rebuild data/survey.csv from open issues only
+      - name: Rebuild data/survey.csv from issues (survey: + old title)
         id: rebuild
         uses: actions/github-script@v7
         with:
@@ -59,16 +59,25 @@ jobs:
               return s;
             }
 
+            // Supports BOTH formats:
+            // A) key: value lines (new Functions format)
+            // B) | key | value | table lines (old format)
             function parseIssueBody(body) {
               const lines = (body || '').split(/\r?\n/);
               const map = {};
 
               for (const line of lines) {
-                const m = line.match(/^\s*\|\s*([^|]+?)\s*\|\s*(.*?)\s*\|\s*$/);
+                // B) Markdown table
+                let m = line.match(/^\s*\|\s*([^|]+?)\s*\|\s*(.*?)\s*\|\s*$/);
                 if (m) {
-                  const key = m[1].trim();
-                  const value = m[2].trim();
-                  map[key] = value;
+                  map[m[1].trim()] = m[2].trim();
+                  continue;
+                }
+                // A) key: value
+                m = line.match(/^\s*([A-Za-z0-9_]+)\s*:\s*(.*?)\s*$/);
+                if (m) {
+                  map[m[1].trim()] = m[2].trim();
+                  continue;
                 }
               }
 
@@ -85,17 +94,22 @@ jobs:
               return hasValue ? rowObject : null;
             }
 
-            core.info(`Fetching OPEN issues only...`);
+            core.info(`Fetching ALL issues...`);
 
             const issues = await github.paginate(
               github.rest.issues.listForRepo,
-              { owner, repo, state: 'open', per_page: 100 }
+              { owner, repo, state: 'all', per_page: 100 }
             );
 
             const latestByPlayer = new Map();
 
             for (const issue of issues) {
-              if (!issue.title?.startsWith("Survey response from:")) continue;
+              if (issue.pull_request) continue;
+
+              const title = issue.title || "";
+              const isOld = title.startsWith("Survey response from:");
+              const isNew = title.startsWith("survey:");
+              if (!isOld && !isNew) continue;
 
               const rowObject = parseIssueBody(issue.body || '');
               if (!rowObject?.player_name) continue;
