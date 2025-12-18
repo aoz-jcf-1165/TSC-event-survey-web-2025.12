@@ -25,18 +25,22 @@ jobs:
         with:
           script: |
             const issue = context.payload.issue;
-            const title = (issue?.title || "").trim();
-            const ok = title.startsWith("survey:");
+            const title = (issue?.title || "").trim().toLowerCase();
+            const labels = (issue?.labels || []).map(l => (l.name || "").toLowerCase());
+            const ok = title.startsWith("survey:") || labels.includes("survey");
             core.setOutput("process", ok ? "true" : "false");
-            core.setOutput("title", title);
+            core.setOutput("title", issue?.title || "");
+            core.setOutput("labels", labels.join(","));
 
       - name: Exit early (success) if not a survey issue
         if: ${{ steps.gate.outputs.process != 'true' }}
         run: |
-          echo "Not a survey issue. title='${{ steps.gate.outputs.title }}'"
+          echo "Not a survey issue."
+          echo "title='${{ steps.gate.outputs.title }}'"
+          echo "labels='${{ steps.gate.outputs.labels }}'"
           exit 0
 
-      - name: Update data/survey.csv from this issue
+      - name: Update data/survey.csv from this issue (latest per player)
         id: update
         uses: actions/github-script@v7
         with:
@@ -61,9 +65,9 @@ jobs:
             ]);
 
             function normalizeLang(v) {
-              const s = (v == null ? '' : String(v)).trim().toLowerCase();
-              if (!s) return 'en';
-              if (s === 'zh') return 'zh-hans';
+              const s0 = (v == null ? '' : String(v)).trim().toLowerCase();
+              if (!s0) return 'en';
+              const s = (s0 === 'zh') ? 'zh-hans' : s0;
               if (!ALLOWED_LANGS.has(s)) return 'en';
               return s;
             }
@@ -98,55 +102,72 @@ jobs:
               return out;
             }
 
-            // Supports BOTH formats:
-            // A) key: value lines (your new Functions format)
-            // B) | key | value | table lines (your old format)
-            function parseIssueBody(body) {
+            // ---- Preferred: parse SURVEY_JSON block ----
+            function parseSurveyJson(body) {
+              const marker = "<!--SURVEY_JSON-->";
+              const idx = body.indexOf(marker);
+              if (idx < 0) return null;
+
+              // try to capture JSON inside ```json ... ```
+              const after = body.slice(idx);
+              const m = after.match(/```json\s*([\s\S]*?)\s*```/i);
+              if (!m) return null;
+
+              try {
+                const obj = JSON.parse(m[1]);
+                return obj && typeof obj === "object" ? obj : null;
+              } catch {
+                return null;
+              }
+            }
+
+            // ---- Fallback: parse "key: value" or "| key | value |" ----
+            function parseKeyValue(body) {
               const lines = (body || '').split(/\r?\n/);
               const map = {};
 
               for (const line of lines) {
-                // B) Markdown table: | key | value |
+                // table
                 let m = line.match(/^\s*\|\s*([^|]+?)\s*\|\s*(.*?)\s*\|\s*$/);
-                if (m) {
-                  map[m[1].trim()] = m[2].trim();
-                  continue;
-                }
+                if (m) { map[m[1].trim()] = m[2].trim(); continue; }
 
-                // A) key: value
+                // key: value
                 m = line.match(/^\s*([A-Za-z0-9_]+)\s*:\s*(.*?)\s*$/);
-                if (m) {
-                  map[m[1].trim()] = m[2].trim();
-                  continue;
-                }
+                if (m) { map[m[1].trim()] = m[2].trim(); continue; }
               }
 
-              const rowObject = {
-                timestamp: map['timestamp'] || '',
-                language: normalizeLang(map['language']),
-                player_name: map['player_name'] || '',
-                Q2_time:
-                  map['Q2_time'] ||
-                  map['Q02_time'] ||
-                  map['Q02 (time)'] ||
-                  '',
-                Q3_time:
-                  map['Q3_time'] ||
-                  map['Q03_time'] ||
-                  map['Q03 (time)'] ||
-                  '',
-                Q4_day:
-                  map['Q4_day'] ||
-                  map['Q04_day'] ||
-                  map['Q04 (day)'] ||
-                  '',
-              };
-
-              const hasValue = Object.values(rowObject).some(v => (v || '') !== '');
-              return hasValue ? rowObject : null;
+              return map;
             }
 
-            const rowObject = parseIssueBody(issue.body || '');
+            function toRowObject(anyObj, fallbackIssue) {
+              const get = (k) => (anyObj && anyObj[k] != null) ? String(anyObj[k]).trim() : "";
+
+              const row = {
+                timestamp: get('timestamp') || (fallbackIssue?.created_at || ''),
+                language: normalizeLang(get('language')),
+                player_name: get('player_name'),
+                Q2_time: get('Q2_time') || get('Q02_time') || get('Q02 (time)') || '',
+                Q3_time: get('Q3_time') || get('Q03_time') || get('Q03 (time)') || '',
+                Q4_day: get('Q4_day') || get('Q04_day') || get('Q04 (day)') || '',
+              };
+
+              const hasValue = Object.values(row).some(v => (v || '') !== '');
+              return hasValue ? row : null;
+            }
+
+            const body = issue.body || '';
+
+            // Parse row from issue
+            let rowObject = null;
+
+            const j = parseSurveyJson(body);
+            if (j) {
+              rowObject = toRowObject(j, issue);
+            } else {
+              const kv = parseKeyValue(body);
+              rowObject = toRowObject(kv, issue);
+            }
+
             if (!rowObject || !rowObject.player_name) {
               core.info(`Issue #${issue.number}: invalid survey body, skip.`);
               core.setOutput('changed', 'false');
@@ -177,6 +198,7 @@ jobs:
               }
             }
 
+            // 최신 1건 상書き: player_name をキーにして上書き
             const mapByPlayer = new Map();
             for (const r of existingRows) {
               if (!r.player_name) continue;
@@ -184,7 +206,9 @@ jobs:
             }
             mapByPlayer.set(rowObject.player_name, rowObject);
 
-            const finalRows = Array.from(mapByPlayer.values());
+            // keep stable order by timestamp
+            const finalRows = Array.from(mapByPlayer.values())
+              .sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)));
 
             let csv = headers.join(',');
             if (finalRows.length > 0) {
