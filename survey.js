@@ -1,66 +1,130 @@
-// ==== Cloudflare Pages Functions API エンドポイント ====
-// 同一ドメイン: /api/submit
-const API_URL = "/api/submit";
+/* =========================================================
+   TSC Event Survey - survey.js (FULL REPLACE)
+   - Uses Cloudflare Pages Functions endpoint (absolute URL)
+   - Handles i18n TSV loading
+   - Handles query params (lang, q02, q03, q04)
+   - Submits JSON to /api/submit with robust error messaging
+   ========================================================= */
 
-// ==== 多言語翻訳設定 ====
+// ==== Cloudflare Pages Functions API (ABSOLUTE URL) ====
+const API_URL = "https://tsc-event-survey-web-2025-12.pages.dev/api/submit";
+
+// ==== i18n TSV ====
 const TRANSLATION_FILE = "translations.tsv";
 
 // ===== CDN PDF link =====
 const CDN_PDF_URL =
   "https://cdn.jsdelivr.net/gh/aoz-jcf-1165/TSC-event-survey-web-2025.12@main/share_document/TSC-event-survey-2025-12.pdf";
 
+// ==== Language labels ====
 const LANGUAGE_LABELS = {
-  "en": "English",
-  "de": "Deutsch",
-  "nl": "Nederlands",
-  "fr": "Français",
-  "ru": "Русский",
-  "es": "Español",
-  "pt": "Português",
-  "it": "Italiano",
+  en: "English",
+  de: "Deutsch",
+  nl: "Nederlands",
+  fr: "Français",
+  ru: "Русский",
+  es: "Español",
+  pt: "Português",
+  it: "Italiano",
   "zh-Hans": "简体中文",
-  "ja": "日本語",
-  "ko": "한국어",
+  ja: "日本語",
+  ko: "한국어",
   "zh-Hant": "繁體中文",
-  "ar": "العربية",
-  "th": "ไทย",
-  "vi": "Tiếng Việt",
-  "tr": "Türkçe",
-  "pl": "Polski",
-  "ms": "Bahasa Melayu",
-  "id": "Bahasa Indonesia"
+  ar: "العربية",
+  th: "ไทย",
+  vi: "Tiếng Việt",
+  tr: "Türkçe",
+  pl: "Polski",
+  ms: "Bahasa Melayu",
+  id: "Bahasa Indonesia",
 };
 
-let translations = {};
-let availableLangs = [];
+// ==== State ====
+let translations = {};     // key -> { lang -> text }
+let availableLangs = [];   // list of langs from header
+let currentLang = "en";
 
-// 言語は localStorage 優先（無ければ en）
-let currentLang = (localStorage.getItem("tsc_lang") || "en").trim() || "en";
-
-// 翻訳ロード完了フラグ（未完了なら送信禁止）
-let isAppReady = false;
-
-function parseTSV(text) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
-  if (lines.length < 2) return;
-
-  const headerCols = lines[0].split("\t");
-  const langs = headerCols.slice(1);
-  availableLangs = langs;
-
-  const data = {};
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split("\t");
-    const key = cols[0];
-    if (!key) continue;
-    data[key] = {};
-    langs.forEach((lang, idx) => {
-      data[key][lang] = cols[idx + 1] || "";
-    });
-  }
-  translations = data;
+// ==== Utils ====
+function qs(sel, root = document) {
+  return root.querySelector(sel);
+}
+function qsa(sel, root = document) {
+  return Array.from(root.querySelectorAll(sel));
 }
 
+function getQueryParams() {
+  const p = new URLSearchParams(location.search);
+  const obj = {};
+  for (const [k, v] of p.entries()) obj[k] = v;
+  return obj;
+}
+
+function setText(el, text) {
+  if (!el) return;
+  el.textContent = text == null ? "" : String(text);
+}
+
+function setError(idOrEl, msg) {
+  const el = typeof idOrEl === "string" ? document.getElementById(idOrEl) : idOrEl;
+  if (!el) return;
+  el.style.display = msg ? "block" : "none";
+  el.textContent = msg || "";
+}
+
+function setFormDisabled(disabled) {
+  const form = document.getElementById("surveyForm");
+  if (!form) return;
+  qsa("input, select, textarea, button", form).forEach((x) => (x.disabled = !!disabled));
+}
+
+function setSubmitEnabled(enabled) {
+  const btn = document.getElementById("submitBtn") || qs('button[type="submit"]');
+  if (btn) btn.disabled = !enabled;
+}
+
+function scrollToBottomSmooth() {
+  try {
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+  } catch (_) {
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+}
+
+// ==== TSV loader ====
+async function loadTranslationsTSV() {
+  const res = await fetch(TRANSLATION_FILE, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to load translations.tsv (${res.status})`);
+  const text = await res.text();
+
+  // TSV: key <tab> en <tab> de ...
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length === 0) throw new Error("translations.tsv is empty");
+
+  const header = lines[0].split("\t").map((s) => s.trim());
+  if (!header.length || header[0] !== "key") {
+    throw new Error('translations.tsv header must start with "key"');
+  }
+
+  availableLangs = header.slice(1);
+  const map = {};
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split("\t");
+    const key = (cols[0] || "").trim();
+    if (!key) continue;
+
+    const entry = {};
+    for (let j = 1; j < header.length; j++) {
+      const lang = header[j];
+      entry[lang] = cols[j] != null ? cols[j] : "";
+    }
+    map[key] = entry;
+  }
+
+  translations = map;
+}
+
+// ==== i18n ====
 function t(key) {
   const entry = translations[key];
   if (!entry) return null;
@@ -72,222 +136,220 @@ function applyLanguage(lang) {
   localStorage.setItem("tsc_lang", currentLang);
 
   document.documentElement.lang = currentLang;
-  document.documentElement.dir = (currentLang === "ar") ? "rtl" : "ltr";
+  document.documentElement.dir = currentLang === "ar" ? "rtl" : "ltr";
 
-  document.querySelectorAll("[data-i18n]").forEach(el => {
-    const key = el.dataset.i18n;
-    const translated = t(key);
-    if (translated != null) el.textContent = translated;
+  // Replace text by data-i18n key
+  qsa("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    const val = t(key);
+    if (val != null) el.textContent = val;
   });
-  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-    const key = el.dataset.i18nPlaceholder;
-    const translated = t(key);
-    if (translated != null) el.placeholder = translated;
+
+  // Replace placeholders
+  qsa("[data-i18n-placeholder]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-placeholder");
+    const val = t(key);
+    if (val != null) el.setAttribute("placeholder", val);
   });
+
+  // Replace html (rare; keep safe)
+  qsa("[data-i18n-html]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-html");
+    const val = t(key);
+    if (val != null) el.innerHTML = val;
+  });
+
+  // Update language label (if present)
+  const langLabel = document.getElementById("currentLangLabel");
+  if (langLabel) {
+    langLabel.textContent = LANGUAGE_LABELS[currentLang] || currentLang;
+  }
+
+  // Update hidden language input if exists
+  const langInput = document.getElementById("language") || qs('input[name="language"]');
+  if (langInput) langInput.value = currentLang;
 }
 
-function populateLanguageSelect() {
-  const select = document.getElementById("languageSelect");
-  if (!select) return;
+function buildLanguageSelector() {
+  const sel =
+    document.getElementById("langSelect") ||
+    qs('select[name="lang"]') ||
+    qs('select[data-role="lang"]');
 
-  select.innerHTML = "";
-  const ordered = ["en", ...availableLangs.filter(l => l !== "en")];
+  if (!sel) return;
 
-  if (!availableLangs.includes(currentLang)) currentLang = "en";
+  // Rebuild options
+  sel.innerHTML = "";
+  const langs = availableLangs.length ? availableLangs : Object.keys(LANGUAGE_LABELS);
 
-  ordered.forEach(code => {
-    if (!availableLangs.includes(code)) return;
+  for (const code of langs) {
     const opt = document.createElement("option");
     opt.value = code;
     opt.textContent = LANGUAGE_LABELS[code] || code;
-    if (code === currentLang) opt.selected = true;
-    select.appendChild(opt);
+    sel.appendChild(opt);
+  }
+
+  sel.value = currentLang;
+  sel.addEventListener("change", () => applyLanguage(sel.value));
+}
+
+// ==== Form helpers ====
+function getCheckedValue(name) {
+  const el = qs(`input[name="${CSS.escape(name)}"]:checked`);
+  return el ? el.value : "";
+}
+
+function setCheckedValue(name, value) {
+  if (!value) return;
+  const el = qs(`input[name="${CSS.escape(name)}"][value="${CSS.escape(value)}"]`);
+  if (el) el.checked = true;
+}
+
+function getTextValue(idOrName) {
+  const el = document.getElementById(idOrName) || qs(`[name="${CSS.escape(idOrName)}"]`);
+  return el ? (el.value || "").trim() : "";
+}
+
+function setTextValue(idOrName, value) {
+  const el = document.getElementById(idOrName) || qs(`[name="${CSS.escape(idOrName)}"]`);
+  if (el) el.value = value != null ? String(value) : "";
+}
+
+function validatePayload(payload) {
+  const missing = [];
+  for (const k of ["player_name", "language", "Q2_time", "Q3_time", "Q4_day"]) {
+    if (!payload[k]) missing.push(k);
+  }
+  return missing;
+}
+
+// ==== Submit ====
+async function submitSurvey(payload) {
+  // NOTE: JSON POST triggers CORS preflight on cross-origin. Server must handle OPTIONS.
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 
-  select.addEventListener("change", () => applyLanguage(select.value));
+  if (!res.ok) {
+    // try to parse detail json
+    let detail = null;
+    try {
+      detail = await res.json();
+    } catch (_) {}
+
+    // show more helpful error
+    const stage = detail && detail.stage ? ` [${detail.stage}]` : "";
+    const gh = detail && detail.githubStatus ? ` GitHub:${detail.githubStatus}` : "";
+    const err = detail && detail.error ? ` - ${detail.error}` : "";
+
+    throw new Error(`Server error (${res.status}).${stage}${gh}${err}`.trim());
+  }
+
+  const data = await res.json().catch(() => ({}));
+  if (!data.ok) {
+    throw new Error("API error. Please try again.");
+  }
+  return data;
 }
 
-function wireCdnLink() {
-  const a = document.getElementById("cdnPdfLink");
-  if (a) a.href = CDN_PDF_URL;
-}
+// ==== Init ====
+async function init() {
+  // PDF link wiring (if exists)
+  const pdfLink = document.getElementById("pdfLink");
+  if (pdfLink) {
+    pdfLink.setAttribute("href", CDN_PDF_URL);
+    pdfLink.setAttribute("target", "_blank");
+    pdfLink.setAttribute("rel", "noopener noreferrer");
+  }
 
-function setSubmitEnabled(enabled) {
-  const btn = document.getElementById("submitBtn");
-  if (btn) btn.disabled = !enabled;
-}
-
-async function loadTranslations() {
+  // Load translations
   try {
-    wireCdnLink();
-
-    const res = await fetch(TRANSLATION_FILE, { cache: "no-store" });
-    if (!res.ok) {
-      console.error("Failed to load translations.tsv");
-      setSubmitEnabled(false);
-      return;
-    }
-    const text = await res.text();
-    parseTSV(text);
-    populateLanguageSelect();
-    applyLanguage(currentLang);
-
-    isAppReady = true;
-    setSubmitEnabled(true);
+    await loadTranslationsTSV();
   } catch (e) {
-    console.error("Error loading translations:", e);
-    setSubmitEnabled(false);
+    console.error(e);
+    // still allow form submission even if i18n fails
   }
-}
 
-function scrollToBottomSmooth() {
-  requestAnimationFrame(() => {
-    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-  });
-}
+  // Determine initial lang
+  const qp = getQueryParams();
+  const saved = localStorage.getItem("tsc_lang");
+  const initialLang = (qp.lang || saved || "en").toString().trim() || "en";
 
-function getRadioValue(name) {
-  const node = document.querySelector(`input[name="${name}"]:checked`);
-  return node ? node.value : "";
-}
+  applyLanguage(initialLang);
+  buildLanguageSelector();
 
-function setError(id, msg) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  if (msg) {
-    el.textContent = msg;
-    el.style.display = "block";
-  } else {
-    el.textContent = "";
-    el.style.display = "none";
+  // Prefill from query params (your URLs like ?q02=A&q03=A&q04=A&lang=en)
+  if (qp.q02) setCheckedValue("Q2_time", qp.q02);
+  if (qp.q03) setCheckedValue("Q3_time", qp.q03);
+  if (qp.q04) setCheckedValue("Q4_day", qp.q04);
+
+  // Ensure hidden language field exists/updated
+  if (document.getElementById("language") || qs('input[name="language"]')) {
+    setTextValue("language", currentLang);
   }
-}
 
-function setFormDisabled(disabled) {
+  // Hook form submit
   const form = document.getElementById("surveyForm");
-  if (!form) return;
-  Array.from(form.elements).forEach(el => {
-    if (["BUTTON","INPUT","SELECT","TEXTAREA"].includes(el.tagName)) el.disabled = disabled;
-  });
-}
-
-function encodeCsvRow(rowObj) {
-  const headers = ["timestamp", "language", "player_name", "Q2_time", "Q3_time", "Q4_day"];
-  return headers.map(h => {
-    const v = rowObj[h] ?? "";
-    if (/[",]/.test(v)) return `"${String(v).replace(/"/g, '""')}"`;
-    return v;
-  }).join(",");
-}
-
-function getSelectedLanguageSafe() {
-  const sel = document.getElementById("languageSelect");
-  const v = (sel && sel.value) ? sel.value : currentLang;
-  return (v || "en").toString().trim() || "en";
-}
-
-async function readResponseSafe(res) {
-  const ct = (res.headers.get("content-type") || "").toLowerCase();
-  if (ct.includes("application/json")) {
-    try { return await res.json(); } catch { return null; }
-  }
-  try { return await res.text(); } catch { return null; }
-}
-
-async function handleSubmit(e) {
-  e.preventDefault();
-
-  if (!isAppReady) {
-    setError("form-error", "Loading languages... Please wait a moment and try again.");
+  if (!form) {
+    console.warn('surveyForm not found. Ensure <form id="surveyForm"> exists.');
     return;
   }
 
-  scrollToBottomSmooth();
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
 
-  setError("form-error", "");
-  setError("error-playerName", "");
-  setError("error-q02", "");
-  setError("error-q03", "");
-  setError("error-q04", "");
-
-  const playerName = document.getElementById("playerName").value.trim();
-  const q02 = getRadioValue("q02");
-  const q03 = getRadioValue("q03");
-  const q04 = getRadioValue("q04");
-
-  let hasError = false;
-  if (!playerName) { setError("error-playerName", "Required / 必須です"); hasError = true; }
-  if (!q02) { setError("error-q02", "Please select one option."); hasError = true; }
-  if (!q03) { setError("error-q03", "Please select one option."); hasError = true; }
-  if (!q04) { setError("error-q04", "Please select one option."); hasError = true; }
-  if (hasError) return;
-
-  const timestamp = new Date().toISOString();
-  const language = getSelectedLanguageSafe();
-  applyLanguage(language);
-
-  const row = { timestamp, language, player_name: playerName, Q2_time: q02, Q3_time: q03, Q4_day: q04 };
-  const csvRow = encodeCsvRow(row);
-
-  const output = document.getElementById("csvOutput");
-  if (output) output.value = csvRow;
-
-  setFormDisabled(true);
-
-  try {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(row)
-    });
-
-    if (!res.ok) {
-      const detail = await readResponseSafe(res);
-      console.error("API error:", res.status, detail);
-
-      // Functions 側が {stage, githubStatus, githubBody} を返すので見える化
-      if (detail && typeof detail === "object") {
-        const msg =
-          `Server error (${res.status}). ` +
-          (detail.stage ? `[${detail.stage}] ` : "") +
-          (detail.githubStatus ? `GitHub:${detail.githubStatus} ` : "") +
-          (detail.error ? `- ${detail.error}` : "");
-        setError("form-error", msg.trim());
-      } else {
-        setError("form-error", `Server error (${res.status}). Please try again later.`);
-      }
-
-      setFormDisabled(false);
-      return;
-    }
-
-    const data = await res.json().catch(() => ({}));
-    if (!data.ok) {
-      setError("form-error", "API error. Please try again.");
-      setFormDisabled(false);
-      return;
-    }
-
+    setError("form-error", "");
+    setError("form-success", "");
     const resultBox = document.getElementById("result");
-    if (resultBox) resultBox.style.display = "block";
+    if (resultBox) resultBox.style.display = "none";
 
-    scrollToBottomSmooth();
-    document.getElementById("surveyForm").reset();
+    // Gather payload
+    const payload = {
+      timestamp: new Date().toISOString(),
+      language: currentLang,
+      player_name: getTextValue("player_name"),
+      Q2_time: getCheckedValue("Q2_time"),
+      Q3_time: getCheckedValue("Q3_time"),
+      Q4_day: getCheckedValue("Q4_day"),
+    };
 
-  } catch (err) {
-    console.error("Network error:", err);
-    setError("form-error", "Network error. Please try again.");
-  } finally {
-    setFormDisabled(false);
-    setSubmitEnabled(true);
-  }
+    // Validate
+    const missing = validatePayload(payload);
+    if (missing.length) {
+      setError("form-error", `Please fill in required fields: ${missing.join(", ")}`);
+      return;
+    }
+
+    // Lock UI
+    setFormDisabled(true);
+    setSubmitEnabled(false);
+
+    try {
+      const data = await submitSurvey(payload);
+
+      // show success
+      setError("form-success", data.message || "Submitted.");
+      const resultBox2 = document.getElementById("result");
+      if (resultBox2) resultBox2.style.display = "block";
+
+      scrollToBottomSmooth();
+      form.reset();
+
+      // keep language after reset
+      applyLanguage(currentLang);
+      setCheckedValue("Q2_time", "");
+      setCheckedValue("Q3_time", "");
+      setCheckedValue("Q4_day", "");
+    } catch (err) {
+      console.error("Submit failed:", err);
+      setError("form-error", err && err.message ? err.message : "Network error. Please try again.");
+    } finally {
+      setFormDisabled(false);
+      setSubmitEnabled(true);
+    }
+  });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  const form = document.getElementById("surveyForm");
-  if (form) form.addEventListener("submit", handleSubmit);
-
-  setSubmitEnabled(false);
-  loadTranslations();
-  wireCdnLink();
-});
+document.addEventListener("DOMContentLoaded", init);
