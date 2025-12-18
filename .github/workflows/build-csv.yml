@@ -19,7 +19,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Rebuild data/survey.csv from issues (latest per player)
+      - name: Rebuild data/survey.csv from OPEN issues only (latest per player)
         id: rebuild
         uses: actions/github-script@v7
         with:
@@ -41,7 +41,9 @@ jobs:
             ];
 
             const ALLOWED_LANGS = new Set([
-              "en","de","nl","fr","ru","es","pt","it","zh-hans","ja","ko","zh-hant","ar","th","vi","tr","pl","ms","id"
+              "en","de","nl","fr","ru","es","pt","it",
+              "zh-hans","ja","ko","zh-hant","ar","th",
+              "vi","tr","pl","ms","id"
             ]);
 
             function escapeCSV(value) {
@@ -100,11 +102,11 @@ jobs:
               return hasValue ? row : null;
             }
 
-            core.info(`Fetching ALL issues...`);
-
+            // ★ OPEN issues ONLY ★
+            core.info(`Fetching OPEN issues only...`);
             const issues = await github.paginate(
               github.rest.issues.listForRepo,
-              { owner, repo, state: 'all', per_page: 100 }
+              { owner, repo, state: 'open', per_page: 100 }
             );
 
             // latest per player_name
@@ -116,10 +118,7 @@ jobs:
               const title = (issue.title || "").trim().toLowerCase();
               const labels = (issue.labels || []).map(l => (l.name || "").toLowerCase());
 
-              // Identify survey issues:
-              // - label "survey" (preferred)
-              // - or title starts with "survey:"
-              // - or old format title
+              // Identify survey issues (open only, by state above)
               const isSurvey =
                 labels.includes("survey") ||
                 title.startsWith("survey:") ||
@@ -180,7 +179,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m "Nightly rebuild survey.csv"
+          git commit -m "Rebuild survey.csv from OPEN issues only"
 
           for i in 1 2 3 4 5; do
             git pull --rebase origin "$BRANCH" || true
