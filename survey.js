@@ -116,4 +116,199 @@ function wireCdnLink() {
   if (a) a.href = CDN_PDF_URL;
 }
 
-function setSubmitEnabled(enabled
+function setSubmitEnabled(enabled) {
+  const btn = document.getElementById("submitBtn");
+  if (btn) btn.disabled = !enabled;
+}
+
+async function loadTranslations() {
+  try {
+    wireCdnLink();
+
+    const res = await fetch(TRANSLATION_FILE, { cache: "no-store" });
+
+    if (!res.ok) {
+      // ★ ここが「無反応」の主因になっていたので、送信は許可しつつ理由を表示
+      console.error("Failed to load translations.tsv:", res.status);
+      isAppReady = false;
+      setError("form-error", `Warning: failed to load translations.tsv (${res.status}). You can still submit, but UI may stay in English.`);
+      // ★ 送信ボタンは有効化（無反応防止）
+      setSubmitEnabled(true);
+      return;
+    }
+
+    const text = await res.text();
+    parseTSV(text);
+    populateLanguageSelect();
+    applyLanguage(currentLang);
+
+    isAppReady = true;
+    setSubmitEnabled(true);
+  } catch (e) {
+    console.error("Error loading translations:", e);
+    isAppReady = false;
+    // ★ 送信は許可
+    setError("form-error", `Warning: translations load error. You can still submit. (${e && e.message ? e.message : e})`);
+    setSubmitEnabled(true);
+  }
+}
+
+function scrollToBottomSmooth() {
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+  });
+}
+
+function getRadioValue(name) {
+  const node = document.querySelector(`input[name="${name}"]:checked`);
+  return node ? node.value : "";
+}
+
+function setError(id, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (msg) {
+    el.textContent = msg;
+    el.style.display = "block";
+  } else {
+    el.textContent = "";
+    el.style.display = "none";
+  }
+}
+
+function setFormDisabled(disabled) {
+  const form = document.getElementById("surveyForm");
+  if (!form) return;
+  Array.from(form.elements).forEach(el => {
+    if (["BUTTON","INPUT","SELECT","TEXTAREA"].includes(el.tagName)) el.disabled = disabled;
+  });
+}
+
+function encodeCsvRow(rowObj) {
+  const headers = ["timestamp", "language", "player_name", "Q2_time", "Q3_time", "Q4_day"];
+  return headers.map(h => {
+    const v = rowObj[h] ?? "";
+    if (/[",]/.test(v)) return `"${String(v).replace(/"/g, '""')}"`;
+    return v;
+  }).join(",");
+}
+
+function getSelectedLanguageSafe() {
+  const sel = document.getElementById("languageSelect");
+  const v = (sel && sel.value) ? sel.value : currentLang;
+  return (v || "en").toString().trim() || "en";
+}
+
+async function readResponseSafe(res) {
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  if (ct.includes("application/json")) {
+    try { return await res.json(); } catch { return null; }
+  }
+  try { return await res.text(); } catch { return null; }
+}
+
+async function handleSubmit(e) {
+  e.preventDefault();
+
+  // ★ 従来は isAppReady=false だと送信拒否 → 無反応に見える原因
+  // 送信は許可し、警告だけ出す
+  if (!isAppReady) {
+    setError("form-error", "Note: languages are still loading (or failed). Submitting with current UI language.");
+  }
+
+  scrollToBottomSmooth();
+
+  setError("error-playerName", "");
+  setError("error-q02", "");
+  setError("error-q03", "");
+  setError("error-q04", "");
+
+  const playerNameEl = document.getElementById("playerName");
+  const playerName = playerNameEl ? playerNameEl.value.trim() : "";
+
+  const q02 = getRadioValue("q02");
+  const q03 = getRadioValue("q03");
+  const q04 = getRadioValue("q04");
+
+  let hasError = false;
+  if (!playerName) { setError("error-playerName", "Required / 必須です"); hasError = true; }
+  if (!q02) { setError("error-q02", "Please select one option."); hasError = true; }
+  if (!q03) { setError("error-q03", "Please select one option."); hasError = true; }
+  if (!q04) { setError("error-q04", "Please select one option."); hasError = true; }
+  if (hasError) return;
+
+  const timestamp = new Date().toISOString();
+  const language = getSelectedLanguageSafe();
+
+  // 反映
+  applyLanguage(language);
+
+  const row = { timestamp, language, player_name: playerName, Q2_time: q02, Q3_time: q03, Q4_day: q04 };
+  const csvRow = encodeCsvRow(row);
+
+  const output = document.getElementById("csvOutput");
+  if (output) output.value = csvRow;
+
+  setFormDisabled(true);
+  setSubmitEnabled(false);
+
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(row)
+    });
+
+    if (!res.ok) {
+      const detail = await readResponseSafe(res);
+      console.error("API error:", res.status, detail);
+
+      if (detail && typeof detail === "object") {
+        const msg =
+          `Server error (${res.status}). ` +
+          (detail.stage ? `[${detail.stage}] ` : "") +
+          (detail.githubStatus ? `GitHub:${detail.githubStatus} ` : "") +
+          (detail.error ? `- ${detail.error}` : (detail.error === "" ? "" : "")) +
+          (detail.gh && detail.gh.status ? ` (gh:${detail.gh.status})` : "");
+        setError("form-error", msg.trim());
+      } else {
+        setError("form-error", `Server error (${res.status}). Please try again later.`);
+      }
+
+      return;
+    }
+
+    const data = await res.json().catch(() => ({}));
+    if (!data.ok) {
+      setError("form-error", "API error. Please try again.");
+      return;
+    }
+
+    setError("form-error", ""); // clear error on success
+
+    const resultBox = document.getElementById("result");
+    if (resultBox) resultBox.style.display = "block";
+
+    scrollToBottomSmooth();
+    const form = document.getElementById("surveyForm");
+    if (form) form.reset();
+
+  } catch (err) {
+    console.error("Network error:", err);
+    setError("form-error", "Network error. Please try again.");
+  } finally {
+    setFormDisabled(false);
+    setSubmitEnabled(true);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.getElementById("surveyForm");
+  if (form) form.addEventListener("submit", handleSubmit);
+
+  // ★ 起動時は一旦有効（無反応対策）
+  setSubmitEnabled(true);
+
+  loadTranslations();
+  wireCdnLink();
+});
