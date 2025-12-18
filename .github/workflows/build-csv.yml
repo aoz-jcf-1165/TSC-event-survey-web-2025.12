@@ -19,7 +19,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Rebuild data/survey.csv from issues (survey: + old title)
+      - name: Rebuild data/survey.csv from issues (latest per player)
         id: rebuild
         uses: actions/github-script@v7
         with:
@@ -52,46 +52,52 @@ jobs:
             }
 
             function normalizeLang(v) {
-              const s = (v == null ? '' : String(v)).trim().toLowerCase();
-              if (!s) return 'en';
-              if (s === 'zh') return 'zh-hans';
+              const s0 = (v == null ? '' : String(v)).trim().toLowerCase();
+              if (!s0) return 'en';
+              const s = (s0 === 'zh') ? 'zh-hans' : s0;
               if (!ALLOWED_LANGS.has(s)) return 'en';
               return s;
             }
 
-            // Supports BOTH formats:
-            // A) key: value lines (new Functions format)
-            // B) | key | value | table lines (old format)
-            function parseIssueBody(body) {
+            function parseSurveyJson(body) {
+              const marker = "<!--SURVEY_JSON-->";
+              const idx = (body || "").indexOf(marker);
+              if (idx < 0) return null;
+              const after = body.slice(idx);
+              const m = after.match(/```json\s*([\s\S]*?)\s*```/i);
+              if (!m) return null;
+              try {
+                const obj = JSON.parse(m[1]);
+                return obj && typeof obj === "object" ? obj : null;
+              } catch {
+                return null;
+              }
+            }
+
+            function parseKeyValue(body) {
               const lines = (body || '').split(/\r?\n/);
               const map = {};
-
               for (const line of lines) {
-                // B) Markdown table
                 let m = line.match(/^\s*\|\s*([^|]+?)\s*\|\s*(.*?)\s*\|\s*$/);
-                if (m) {
-                  map[m[1].trim()] = m[2].trim();
-                  continue;
-                }
-                // A) key: value
+                if (m) { map[m[1].trim()] = m[2].trim(); continue; }
                 m = line.match(/^\s*([A-Za-z0-9_]+)\s*:\s*(.*?)\s*$/);
-                if (m) {
-                  map[m[1].trim()] = m[2].trim();
-                  continue;
-                }
+                if (m) { map[m[1].trim()] = m[2].trim(); continue; }
               }
+              return map;
+            }
 
-              const rowObject = {
-                timestamp: map['timestamp'] || '',
-                language: normalizeLang(map['language']),
-                player_name: map['player_name'] || '',
-                Q2_time: map['Q2_time'] || map['Q02_time'] || map['Q02 (time)'] || '',
-                Q3_time: map['Q3_time'] || map['Q03_time'] || map['Q03 (time)'] || '',
-                Q4_day: map['Q4_day'] || map['Q04_day'] || map['Q04 (day)'] || '',
+            function toRowObject(anyObj, issue) {
+              const get = (k) => (anyObj && anyObj[k] != null) ? String(anyObj[k]).trim() : "";
+              const row = {
+                timestamp: get('timestamp') || (issue?.created_at || ''),
+                language: normalizeLang(get('language')),
+                player_name: get('player_name'),
+                Q2_time: get('Q2_time') || get('Q02_time') || get('Q02 (time)') || '',
+                Q3_time: get('Q3_time') || get('Q03_time') || get('Q03 (time)') || '',
+                Q4_day: get('Q4_day') || get('Q04_day') || get('Q04 (day)') || '',
               };
-
-              const hasValue = Object.values(rowObject).some(v => (v || '') !== '');
-              return hasValue ? rowObject : null;
+              const hasValue = Object.values(row).some(v => (v || '') !== '');
+              return hasValue ? row : null;
             }
 
             core.info(`Fetching ALL issues...`);
@@ -101,17 +107,33 @@ jobs:
               { owner, repo, state: 'all', per_page: 100 }
             );
 
+            // latest per player_name
             const latestByPlayer = new Map();
 
             for (const issue of issues) {
               if (issue.pull_request) continue;
 
-              const title = issue.title || "";
-              const isOld = title.startsWith("Survey response from:");
-              const isNew = title.startsWith("survey:");
-              if (!isOld && !isNew) continue;
+              const title = (issue.title || "").trim().toLowerCase();
+              const labels = (issue.labels || []).map(l => (l.name || "").toLowerCase());
 
-              const rowObject = parseIssueBody(issue.body || '');
+              // Identify survey issues:
+              // - label "survey" (preferred)
+              // - or title starts with "survey:"
+              // - or old format title
+              const isSurvey =
+                labels.includes("survey") ||
+                title.startsWith("survey:") ||
+                (issue.title || "").startsWith("Survey response from:");
+
+              if (!isSurvey) continue;
+
+              const body = issue.body || '';
+
+              let rowObject = null;
+              const j = parseSurveyJson(body);
+              if (j) rowObject = toRowObject(j, issue);
+              else rowObject = toRowObject(parseKeyValue(body), issue);
+
               if (!rowObject?.player_name) continue;
 
               const key = rowObject.player_name;
