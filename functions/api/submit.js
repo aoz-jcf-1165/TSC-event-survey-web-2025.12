@@ -1,5 +1,5 @@
 // =====================
-// /functions/api/submit.js (FULL REPLACE)
+// /functions/api/submit.js (FULL REPLACE / improved)
 // =====================
 export async function onRequest(context) {
   const { request, env } = context;
@@ -78,12 +78,34 @@ export async function onRequest(context) {
     );
   }
 
-  // --- バリデーション ---
-  const language = str(payload.language);
-  const player_name = str(payload.player_name);
-  const Q2_time = str(payload.Q2_time);
-  const Q3_time = str(payload.Q3_time);
-  const Q4_day = str(payload.Q4_day);
+  // --- normalize/sanitize helpers ---
+  function cleanText(v, maxLen = 120) {
+    const s = (v == null ? "" : String(v))
+      .replace(/\r/g, "")
+      .replace(/\n/g, " ")
+      .trim();
+    if (!s) return "";
+    return s.length > maxLen ? s.slice(0, maxLen) : s;
+  }
+
+  function normalizeLang(v) {
+    let s = cleanText(v, 32).toLowerCase();
+    if (!s) return "en";
+    if (s === "zh") s = "zh-hans";
+    // Accept known set; otherwise fallback en
+    const allowed = new Set([
+      "en","de","nl","fr","ru","es","pt","it","zh-hans","ja","ko","zh-hant","ar","th","vi","tr","pl","ms","id"
+    ]);
+    if (!allowed.has(s)) return "en";
+    return s;
+  }
+
+  // --- バリデーション & 正規化 ---
+  const language = normalizeLang(payload.language);
+  const player_name = cleanText(payload.player_name, 80);
+  const Q2_time = cleanText(payload.Q2_time, 10);
+  const Q3_time = cleanText(payload.Q3_time, 10);
+  const Q4_day = cleanText(payload.Q4_day, 12);
 
   const missing = [];
   if (!player_name) missing.push("player_name");
@@ -108,9 +130,22 @@ export async function onRequest(context) {
     );
   }
 
-  // --- 送信内容（GitHub Issue に入れる） ---
   const stamp = now;
+
+  // ---- Issue title / label rules (workflow expects survey: OR label=survey) ----
   const issueTitle = `survey:${player_name}`;
+
+  // ---- Robust machine-readable block (preferred by workflows) ----
+  const surveyJson = {
+    timestamp: stamp,
+    language,
+    player_name,
+    Q2_time,
+    Q3_time,
+    Q4_day,
+  };
+
+  // ---- Human-readable + JSON marker ----
   const issueBody = [
     `timestamp: ${stamp}`,
     `language: ${language}`,
@@ -119,9 +154,11 @@ export async function onRequest(context) {
     `Q3_time: ${Q3_time}`,
     `Q4_day: ${Q4_day}`,
     "",
+    "<!--SURVEY_JSON-->",
     "```json",
-    JSON.stringify({ timestamp: stamp, language, player_name, Q2_time, Q3_time, Q4_day }, null, 2),
+    JSON.stringify(surveyJson, null, 2),
     "```",
+    "",
   ].join("\n");
 
   const ghUrl = `https://api.github.com/repos/${owner}/${repo}/issues`;
@@ -144,7 +181,7 @@ export async function onRequest(context) {
       body: JSON.stringify({
         title: issueTitle,
         body: issueBody,
-        labels: ["survey"],
+        labels: ["survey"], // ★ label も必ず付与（強い識別）
       }),
     });
     ghText = await ghRes.text();
@@ -228,6 +265,5 @@ function json(status, obj, headers = {}) {
   });
 }
 
-function str(v) { return (v == null ? "" : String(v)).trim(); }
 function safeErr(e) { return { name: e?.name || "Error", message: e?.message || String(e) }; }
 function limitText(s, max) { if (!s) return ""; return s.length > max ? s.slice(0, max) + "…(truncated)" : s; }
