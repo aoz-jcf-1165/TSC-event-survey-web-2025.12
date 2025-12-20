@@ -1,110 +1,269 @@
 // =====================
-// /functions/api/submit.js (FULL REPLACE / FINAL)
+// /functions/api/submit.js (FULL REPLACE / improved)
 // =====================
 export async function onRequest(context) {
   const { request, env } = context;
 
-  const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+  const ray = request.headers.get("cf-ray") || "";
+  const requestId = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  // --- CORS / preflight ---
+  if (request.method === "OPTIONS") {
+    return json(204, null, corsHeaders());
+  }
+
+  // --- GETは “使い方” をJSONで返す（iPhoneで見やすい） ---
+  if (request.method !== "POST") {
+    return json(
+      405,
+      {
+        ok: false,
+        error: "Use POST only.",
+        hint: {
+          url: "/api/submit",
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body_example: {
+            language: "en",
+            player_name: "TEST",
+            Q2_time: "A",
+            Q3_time: "B",
+            Q4_day: "C",
+          },
+        },
+        requestId,
+        time: now,
+        ray,
+      },
+      { ...corsHeaders(), "Cache-Control": "no-store" }
+    );
+  }
+
+  // --- 必須ENVチェック ---
+  const token = (env.GITHUB_TOKEN || "").trim();
+  const owner = (env.GITHUB_OWNER || "aoz-jcf-1165").trim();
+  const repo  = (env.GITHUB_REPO  || "TSC-event-survey-web-2025.12").trim();
+
+  if (!token) {
+    return json(
+      500,
+      {
+        ok: false,
+        error: "Missing GITHUB_TOKEN in Pages project variables (secret).",
+        requestId,
+        time: now,
+        ray,
+      },
+      { ...corsHeaders(), "Cache-Control": "no-store" }
+    );
+  }
+
+  // --- JSON受け取り（失敗しても必ずJSON返す） ---
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return json(
+      400,
+      {
+        ok: false,
+        error: "Invalid JSON body.",
+        detail: safeErr(e),
+        requestId,
+        time: now,
+        ray,
+      },
+      { ...corsHeaders(), "Cache-Control": "no-store" }
+    );
+  }
+
+  // --- normalize/sanitize helpers ---
+  function cleanText(v, maxLen = 120) {
+    const s = (v == null ? "" : String(v))
+      .replace(/\r/g, "")
+      .replace(/\n/g, " ")
+      .trim();
+    if (!s) return "";
+    return s.length > maxLen ? s.slice(0, maxLen) : s;
+  }
+
+  function normalizeLang(v) {
+    let s = cleanText(v, 32).toLowerCase();
+    if (!s) return "en";
+    if (s === "zh") s = "zh-hans";
+    // Accept known set; otherwise fallback en
+    const allowed = new Set([
+      "en","de","nl","fr","ru","es","pt","it","zh-hans","ja","ko","zh-hant","ar","th","vi","tr","pl","ms","id"
+    ]);
+    if (!allowed.has(s)) return "en";
+    return s;
+  }
+
+  // --- バリデーション & 正規化 ---
+  const language = normalizeLang(payload.language);
+  const player_name = cleanText(payload.player_name, 80);
+  const Q2_time = cleanText(payload.Q2_time, 10);
+  const Q3_time = cleanText(payload.Q3_time, 10);
+  const Q4_day = cleanText(payload.Q4_day, 12);
+
+  const missing = [];
+  if (!player_name) missing.push("player_name");
+  if (!language) missing.push("language");
+  if (!Q2_time) missing.push("Q2_time");
+  if (!Q3_time) missing.push("Q3_time");
+  if (!Q4_day) missing.push("Q4_day");
+
+  if (missing.length) {
+    return json(
+      400,
+      {
+        ok: false,
+        error: "Missing required fields.",
+        missing,
+        received: { language, player_name, Q2_time, Q3_time, Q4_day },
+        requestId,
+        time: now,
+        ray,
+      },
+      { ...corsHeaders(), "Cache-Control": "no-store" }
+    );
+  }
+
+  const stamp = now;
+
+  // ---- Issue title / label rules (workflow expects survey: OR label=survey) ----
+  const issueTitle = `survey:${player_name}`;
+
+  // ---- Robust machine-readable block (preferred by workflows) ----
+  const surveyJson = {
+    timestamp: stamp,
+    language,
+    player_name,
+    Q2_time,
+    Q3_time,
+    Q4_day,
   };
 
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
-  }
-  if (request.method !== "POST") {
-    return json(405, { ok: false, message: "Method not allowed" }, corsHeaders);
-  }
+  // ---- Human-readable + JSON marker ----
+  const issueBody = [
+    `timestamp: ${stamp}`,
+    `language: ${language}`,
+    `player_name: ${player_name}`,
+    `Q2_time: ${Q2_time}`,
+    `Q3_time: ${Q3_time}`,
+    `Q4_day: ${Q4_day}`,
+    "",
+    "<!--SURVEY_JSON-->",
+    "```json",
+    JSON.stringify(surveyJson, null, 2),
+    "```",
+    "",
+  ].join("\n");
 
-  const now = new Date().toISOString();
-  const requestId = crypto.randomUUID();
+  const ghUrl = `https://api.github.com/repos/${owner}/${repo}/issues`;
 
+  const controller = new AbortController();
+  const timeoutMs = 15000;
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+
+  let ghRes, ghText;
   try {
-    const token = (env.GITHUB_TOKEN || "").trim();
-    const owner = (env.GITHUB_OWNER || "").trim();
-    const repo  = (env.GITHUB_REPO  || "").trim();
-
-    if (!token || !owner || !repo) {
-      return json(500, { ok: false, message: "Missing GitHub env" }, corsHeaders);
-    }
-
-    const body = await request.json();
-    const player_name = clean(body.player_name);
-    const language    = clean(body.language);
-    const Q2_time     = clean(body.Q2_time);
-    const Q3_time     = clean(body.Q3_time);
-    const Q4_day      = clean(body.Q4_day);
-
-    if (!player_name || !language || !Q2_time || !Q3_time || !Q4_day) {
-      return json(400, { ok: false, message: "Missing fields" }, corsHeaders);
-    }
-
-    const gh = github(token);
-
-    // --- close old issues (same player) ---
-    const q = `repo:${owner}/${repo} is:issue is:open in:title "Survey Response: ${escape(player_name)}"`;
-    const found = await gh.search(q);
-
-    for (const it of found.items) {
-      await gh.update(owner, repo, it.number, { state: "closed" });
-    }
-
-    // --- create new issue (ONLY ONE with survey) ---
-    const issue = await gh.create(owner, repo, {
-      title: `Survey Response: ${player_name}`,
-      labels: ["survey"],
-      body: [
-        "Auto-submitted survey",
-        "",
-        "```json",
-        JSON.stringify({ timestamp: now, language, player_name, Q2_time, Q3_time, Q4_day }, null, 2),
-        "```",
-      ].join("\n"),
+    ghRes = await fetch(ghUrl, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "User-Agent": "cf-pages-functions-survey",
+      },
+      body: JSON.stringify({
+        title: issueTitle,
+        body: issueBody,
+        labels: ["survey"], // ★ label も必ず付与（強い識別）
+      }),
     });
-
-    return json(200, {
-      ok: true,
-      issue: { number: issue.number, url: issue.html_url },
-    }, corsHeaders);
-
+    ghText = await ghRes.text();
   } catch (e) {
-    return json(500, { ok: false, error: String(e) }, corsHeaders);
+    clearTimeout(t);
+    return json(
+      503,
+      {
+        ok: false,
+        error: "Upstream request failed (fetch/GitHub).",
+        detail: safeErr(e),
+        timeoutMs,
+        ghUrl,
+        requestId,
+        time: now,
+        ray,
+      },
+      { ...corsHeaders(), "Cache-Control": "no-store" }
+    );
+  } finally {
+    clearTimeout(t);
   }
+
+  if (!ghRes.ok) {
+    return json(
+      502,
+      {
+        ok: false,
+        error: "GitHub API returned error.",
+        gh: {
+          status: ghRes.status,
+          statusText: ghRes.statusText,
+          body: limitText(ghText, 4000),
+        },
+        hint: [
+          "1) token権限 (repo / issues write) を確認",
+          "2) owner/repo 名が正しいか確認",
+          "3) GitHub側のレート制限・障害の可能性",
+        ],
+        requestId,
+        time: now,
+        ray,
+      },
+      { ...corsHeaders(), "Cache-Control": "no-store" }
+    );
+  }
+
+  let ghJson = null;
+  try { ghJson = JSON.parse(ghText); } catch (_) {}
+
+  return json(
+    200,
+    {
+      ok: true,
+      message: "Submitted.",
+      issue: ghJson ? { number: ghJson.number, url: ghJson.html_url } : null,
+      requestId,
+      time: now,
+      ray,
+    },
+    { ...corsHeaders(), "Cache-Control": "no-store" }
+  );
 }
 
-function clean(v) {
-  return String(v || "").trim();
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  };
 }
-function escape(s) {
-  return s.replace(/"/g, '\\"');
-}
-function json(status, data, headers = {}) {
-  return new Response(JSON.stringify(data, null, 2), {
+
+function json(status, obj, headers = {}) {
+  if (status === 204) return new Response(null, { status, headers });
+  return new Response(JSON.stringify(obj), {
     status,
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      ...headers,
+    },
   });
 }
 
-function github(token) {
-  const base = "https://api.github.com";
-  const headers = {
-    "Authorization": `Bearer ${token}`,
-    "Accept": "application/vnd.github+json",
-    "Content-Type": "application/json",
-    "User-Agent": "cf-pages-survey-function"
-  };
-
-  async function req(path, init = {}) {
-    const r = await fetch(base + path, { ...init, headers });
-    const t = await r.text();
-    if (!r.ok) throw new Error(t);
-    return t ? JSON.parse(t) : null;
-  }
-
-  return {
-    search: q => req(`/search/issues?q=${encodeURIComponent(q)}`),
-    update: (o, r, n, d) => req(`/repos/${o}/${r}/issues/${n}`, { method: "PATCH", body: JSON.stringify(d) }),
-    create: (o, r, d) => req(`/repos/${o}/${r}/issues`, { method: "POST", body: JSON.stringify(d) }),
-  };
-}
+function safeErr(e) { return { name: e?.name || "Error", message: e?.message || String(e) }; }
+function limitText(s, max) { if (!s) return ""; return s.length > max ? s.slice(0, max) + "…(truncated)" : s; }
