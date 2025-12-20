@@ -134,6 +134,12 @@ select {
   max-width: 70%;
 }
 
+select option {
+  background-color: #0b1120;
+  color: #e5e7eb;
+}
+
+
 main {
   margin-top: 8px;
 }
