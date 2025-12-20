@@ -1,6 +1,15 @@
 // =====================
-// /functions/api/submit.js (FULL REPLACE / improved)
+// /functions/api/submit.js (FULL REPLACE)  [TSC VERSION]
 // =====================
+
+// ====== FIXED TARGET (TSC) ======
+// ここが最重要：TSC repo に必ず issue を作る
+const FIXED_OWNER = "aoz-jcf-1165";
+const FIXED_REPO  = "TSC-event-survey-web-2025.12";
+
+// Label to mark survey issues (optional but recommended)
+const SURVEY_LABEL = "survey";
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -13,7 +22,7 @@ export async function onRequest(context) {
     return json(204, null, corsHeaders());
   }
 
-  // --- GETは “使い方” をJSONで返す（iPhoneで見やすい） ---
+  // POST only
   if (request.method !== "POST") {
     return json(
       405,
@@ -26,244 +35,190 @@ export async function onRequest(context) {
           headers: { "Content-Type": "application/json" },
           body_example: {
             language: "en",
-            player_name: "TEST",
+            player_name: "YourName",
             Q2_time: "A",
             Q3_time: "B",
-            Q4_day: "C",
+            Q4_day: "H",
           },
         },
-        requestId,
         time: now,
+        requestId,
         ray,
       },
-      { ...corsHeaders(), "Cache-Control": "no-store" }
+      { ...corsHeaders() }
     );
   }
 
-  // --- 必須ENVチェック ---
-  const token = (env.GITHUB_TOKEN || "").trim();
-  const owner = (env.GITHUB_OWNER || "aoz-jcf-1165").trim();
-  const repo  = (env.GITHUB_REPO  || "TSC-event-survey-web-2025.12").trim();
-
+  // Token required
+  const token = (env?.GITHUB_TOKEN || "").trim();
   if (!token) {
     return json(
       500,
       {
         ok: false,
-        error: "Missing GITHUB_TOKEN in Pages project variables (secret).",
-        requestId,
+        message: "Missing GITHUB_TOKEN in Pages project variables (secret).",
         time: now,
+        requestId,
         ray,
       },
-      { ...corsHeaders(), "Cache-Control": "no-store" }
+      corsHeaders()
     );
   }
 
-  // --- JSON受け取り（失敗しても必ずJSON返す） ---
+  // Read JSON
   let payload;
   try {
     payload = await request.json();
-  } catch (e) {
+  } catch {
     return json(
       400,
-      {
-        ok: false,
-        error: "Invalid JSON body.",
-        detail: safeErr(e),
-        requestId,
-        time: now,
-        ray,
-      },
-      { ...corsHeaders(), "Cache-Control": "no-store" }
+      { ok: false, message: "Invalid JSON body.", time: now, requestId, ray },
+      corsHeaders()
     );
   }
 
-  // --- normalize/sanitize helpers ---
-  function cleanText(v, maxLen = 120) {
-    const s = (v == null ? "" : String(v))
-      .replace(/\r/g, "")
-      .replace(/\n/g, " ")
-      .trim();
-    if (!s) return "";
-    return s.length > maxLen ? s.slice(0, maxLen) : s;
-  }
+  const body = normalizePayload(payload);
 
-  function normalizeLang(v) {
-    let s = cleanText(v, 32).toLowerCase();
-    if (!s) return "en";
-    if (s === "zh") s = "zh-hans";
-    // Accept known set; otherwise fallback en
-    const allowed = new Set([
-      "en","de","nl","fr","ru","es","pt","it","zh-hans","ja","ko","zh-hant","ar","th","vi","tr","pl","ms","id"
-    ]);
-    if (!allowed.has(s)) return "en";
-    return s;
-  }
-
-  // --- バリデーション & 正規化 ---
-  const language = normalizeLang(payload.language);
-  const player_name = cleanText(payload.player_name, 80);
-  const Q2_time = cleanText(payload.Q2_time, 10);
-  const Q3_time = cleanText(payload.Q3_time, 10);
-  const Q4_day = cleanText(payload.Q4_day, 12);
-
+  // Validate required
   const missing = [];
-  if (!player_name) missing.push("player_name");
-  if (!language) missing.push("language");
-  if (!Q2_time) missing.push("Q2_time");
-  if (!Q3_time) missing.push("Q3_time");
-  if (!Q4_day) missing.push("Q4_day");
+  if (!body.player_name) missing.push("player_name");
+  if (!body.language) missing.push("language");
+  if (!body.Q2_time) missing.push("Q2_time");
+  if (!body.Q3_time) missing.push("Q3_time");
+  if (!body.Q4_day) missing.push("Q4_day");
 
   if (missing.length) {
     return json(
       400,
-      {
-        ok: false,
-        error: "Missing required fields.",
-        missing,
-        received: { language, player_name, Q2_time, Q3_time, Q4_day },
-        requestId,
-        time: now,
-        ray,
-      },
-      { ...corsHeaders(), "Cache-Control": "no-store" }
+      { ok: false, missing, time: now, requestId, ray },
+      corsHeaders()
     );
   }
 
-  const stamp = now;
-
-  // ---- Issue title / label rules (workflow expects survey: OR label=survey) ----
-  const issueTitle = `survey:${player_name}`;
-
-  // ---- Robust machine-readable block (preferred by workflows) ----
-  const surveyJson = {
-    timestamp: stamp,
-    language,
-    player_name,
-    Q2_time,
-    Q3_time,
-    Q4_day,
+  // Build issue title/body
+  // “最新1件で上書き” は CSV 側で同一 player_name の最新 timestamp を採用する方式で担保します
+  const issueTitle = `Survey Response: ${body.player_name}`;
+  const issueBodyJson = {
+    timestamp: now,
+    ...body,
+    source: "pages_function",
+    requestId,
+    ray,
   };
 
-  // ---- Human-readable + JSON marker ----
-  const issueBody = [
-    `timestamp: ${stamp}`,
-    `language: ${language}`,
-    `player_name: ${player_name}`,
-    `Q2_time: ${Q2_time}`,
-    `Q3_time: ${Q3_time}`,
-    `Q4_day: ${Q4_day}`,
-    "",
-    "<!--SURVEY_JSON-->",
-    "```json",
-    JSON.stringify(surveyJson, null, 2),
-    "```",
-    "",
-  ].join("\n");
+  const issueBodyText =
+    `<!-- survey_response -->\n` +
+    `\n` +
+    "```json\n" +
+    JSON.stringify(issueBodyJson, null, 2) +
+    "\n```\n";
 
-  const ghUrl = `https://api.github.com/repos/${owner}/${repo}/issues`;
-
-  const controller = new AbortController();
-  const timeoutMs = 15000;
-  const t = setTimeout(() => controller.abort(), timeoutMs);
-
-  let ghRes, ghText;
   try {
-    ghRes = await fetch(ghUrl, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Accept": "application/vnd.github+json",
-        "Content-Type": "application/json",
-        "User-Agent": "cf-pages-functions-survey",
-      },
-      body: JSON.stringify({
-        title: issueTitle,
-        body: issueBody,
-        labels: ["survey"], // ★ label も必ず付与（強い識別）
-      }),
+    const created = await createIssue({
+      token,
+      owner: FIXED_OWNER,
+      repo: FIXED_REPO,
+      title: issueTitle,
+      body: issueBodyText,
+      labels: [SURVEY_LABEL],
     });
-    ghText = await ghRes.text();
-  } catch (e) {
-    clearTimeout(t);
-    return json(
-      503,
-      {
-        ok: false,
-        error: "Upstream request failed (fetch/GitHub).",
-        detail: safeErr(e),
-        timeoutMs,
-        ghUrl,
-        requestId,
-        time: now,
-        ray,
-      },
-      { ...corsHeaders(), "Cache-Control": "no-store" }
-    );
-  } finally {
-    clearTimeout(t);
-  }
 
-  if (!ghRes.ok) {
     return json(
-      502,
+      200,
       {
-        ok: false,
-        error: "GitHub API returned error.",
-        gh: {
-          status: ghRes.status,
-          statusText: ghRes.statusText,
-          body: limitText(ghText, 4000),
+        ok: true,
+        message: "Submitted.",
+        time: now,
+        requestId,
+        ray,
+        issue: {
+          number: created.number,
+          url: created.html_url,
         },
-        hint: [
-          "1) token権限 (repo / issues write) を確認",
-          "2) owner/repo 名が正しいか確認",
-          "3) GitHub側のレート制限・障害の可能性",
-        ],
-        requestId,
+      },
+      corsHeaders()
+    );
+  } catch (err) {
+    const msg = String(err?.message || err || "Unknown error");
+    const status = err?.status || 502;
+
+    return json(
+      status,
+      {
+        ok: false,
+        message: "Server error.",
+        detail: msg,
         time: now,
+        requestId,
         ray,
       },
-      { ...corsHeaders(), "Cache-Control": "no-store" }
+      corsHeaders()
     );
   }
+}
 
-  let ghJson = null;
-  try { ghJson = JSON.parse(ghText); } catch (_) {}
+function normalizePayload(p) {
+  const obj = (p && typeof p === "object") ? p : {};
+  return {
+    language: safeStr(obj.language),
+    player_name: safeStr(obj.player_name),
+    Q2_time: safeStr(obj.Q2_time),
+    Q3_time: safeStr(obj.Q3_time),
+    Q4_day: safeStr(obj.Q4_day),
+  };
+}
 
-  return json(
-    200,
-    {
-      ok: true,
-      message: "Submitted.",
-      issue: ghJson ? { number: ghJson.number, url: ghJson.html_url } : null,
-      requestId,
-      time: now,
-      ray,
+function safeStr(v) {
+  if (v == null) return "";
+  return String(v).trim();
+}
+
+async function createIssue({ token, owner, repo, title, body, labels }) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/issues`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Accept": "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "survey-pages-function",
     },
-    { ...corsHeaders(), "Cache-Control": "no-store" }
-  );
+    body: JSON.stringify({
+      title,
+      body,
+      labels: Array.isArray(labels) ? labels : undefined,
+    }),
+  });
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    const e = new Error(
+      `GitHub API error: ${res.status} ${res.statusText} ` +
+      (data?.message ? `- ${data.message}` : "")
+    );
+    e.status = res.status;
+    throw e;
+  }
+
+  return data;
 }
 
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "86400",
   };
 }
 
-function json(status, obj, headers = {}) {
-  if (status === 204) return new Response(null, { status, headers });
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      ...headers,
-    },
-  });
+function json(status, data, extraHeaders = {}) {
+  const headers = {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    ...extraHeaders,
+  };
+  return new Response(data == null ? null : JSON.stringify(data, null, 2), { status, headers });
 }
-
-function safeErr(e) { return { name: e?.name || "Error", message: e?.message || String(e) }; }
-function limitText(s, max) { if (!s) return ""; return s.length > max ? s.slice(0, max) + "…(truncated)" : s; }
