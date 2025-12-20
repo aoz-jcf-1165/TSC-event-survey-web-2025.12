@@ -4,20 +4,14 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "0 18 * * *"   # UTC 18:00 → JST 翌日 03:00
-  issues:
-    types: [opened, edited, reopened, closed]  # labeled/unlabeled は二重発火の元なので使わない
-
-permissions:
-  contents: write
-  issues: read
-
-concurrency:
-  group: survey-csv
-  cancel-in-progress: false
 
 jobs:
   rebuild:
     runs-on: ubuntu-latest
+
+    concurrency:
+      group: survey-csv
+      cancel-in-progress: false
 
     steps:
       - name: Checkout repository
@@ -25,154 +19,177 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Rebuild data/survey.csv and data/survey_all.csv from issues
+      - name: Rebuild data/survey.csv from OPEN issues only (latest per player)
         id: rebuild
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require("fs");
-            const path = require("path");
+            const fs = require('fs');
+            const path = require('path');
 
             const owner = context.repo.owner;
             const repo  = context.repo.repo;
 
-            const outDir = path.join(process.cwd(), "data");
-            if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+            const headers = [
+              'timestamp',
+              'language',
+              'player_name',
+              'Q2_time',
+              'Q3_time',
+              'Q4_day',
+            ];
 
-            const headers = ["timestamp","language","player_name","Q2_time","Q3_time","Q4_day"];
+            const ALLOWED_LANGS = new Set([
+              "en","de","nl","fr","ru","es","pt","it",
+              "zh-hans","ja","ko","zh-hant","ar","th",
+              "vi","tr","pl","ms","id"
+            ]);
 
-            function csvEscape(v) {
-              if (v == null) return "";
-              const s = String(v);
-              if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g,'""')}"`;
+            function escapeCSV(value) {
+              if (value == null) return '';
+              const s = String(value);
+              if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
               return s;
             }
 
-            function toCSV(rows) {
-              const lines = [];
-              lines.push(headers.join(","));
-              for (const r of rows) {
-                lines.push(headers.map(h => csvEscape(r[h] ?? "")).join(","));
-              }
-              return lines.join("\n") + "\n";
+            function normalizeLang(v) {
+              const s0 = (v == null ? '' : String(v)).trim().toLowerCase();
+              if (!s0) return 'en';
+              const s = (s0 === 'zh') ? 'zh-hans' : s0;
+              if (!ALLOWED_LANGS.has(s)) return 'en';
+              return s;
             }
 
-            function extractJsonFromBody(body) {
-              if (!body) return null;
-
-              // まず ```json ... ``` を探す
-              const m = body.match(/```json\s*([\s\S]*?)\s*```/i);
-              if (m && m[1]) {
-                try { return JSON.parse(m[1]); } catch { /* fallthrough */ }
+            function parseSurveyJson(body) {
+              const marker = "<!--SURVEY_JSON-->";
+              const idx = (body || "").indexOf(marker);
+              if (idx < 0) return null;
+              const after = body.slice(idx);
+              const m = after.match(/```json\s*([\s\S]*?)\s*```/i);
+              if (!m) return null;
+              try {
+                const obj = JSON.parse(m[1]);
+                return obj && typeof obj === "object" ? obj : null;
+              } catch {
+                return null;
               }
-
-              // フォールバック：本文内に JSON っぽい塊があれば拾う（保険）
-              // ※誤検出を避けるため "player_name" を含む場合のみ
-              const idx = body.indexOf("{");
-              if (idx >= 0 && body.includes('"player_name"')) {
-                const tail = body.slice(idx);
-                const end = tail.lastIndexOf("}");
-                if (end >= 0) {
-                  const candidate = tail.slice(0, end + 1);
-                  try { return JSON.parse(candidate); } catch {}
-                }
-              }
-              return null;
             }
 
-            async function listAllSurveyIssuesStateAll() {
-              // GitHub REST: issues.listForRepo をページネーション
-              // state=all で open/closed 両方。labels=survey で対象固定。
-              const per_page = 100;
-              let page = 1;
-              let all = [];
-
-              while (true) {
-                const res = await github.rest.issues.listForRepo({
-                  owner, repo,
-                  state: "all",
-                  labels: "survey",
-                  per_page,
-                  page,
-                  sort: "created",
-                  direction: "desc",
-                });
-
-                const items = res.data || [];
-                // PR が混ざる可能性があるので弾く（issues API だが稀に入る）
-                const issuesOnly = items.filter(it => !it.pull_request);
-
-                all.push(...issuesOnly);
-
-                if (items.length < per_page) break;
-                page++;
-                if (page > 50) break; // 安全弁（通常ここまで行かない）
+            function parseKeyValue(body) {
+              const lines = (body || '').split(/\r?\n/);
+              const map = {};
+              for (const line of lines) {
+                let m = line.match(/^\s*\|\s*([^|]+?)\s*\|\s*(.*?)\s*\|\s*$/);
+                if (m) { map[m[1].trim()] = m[2].trim(); continue; }
+                m = line.match(/^\s*([A-Za-z0-9_]+)\s*:\s*(.*?)\s*$/);
+                if (m) { map[m[1].trim()] = m[2].trim(); continue; }
               }
-
-              return all;
+              return map;
             }
 
-            const issues = await listAllSurveyIssuesStateAll();
-
-            // 1) 全履歴 rows
-            const allRows = [];
-            for (const it of issues) {
-              const data = extractJsonFromBody(it.body);
-              if (!data) continue;
-
+            function toRowObject(anyObj, issue) {
+              const get = (k) => (anyObj && anyObj[k] != null) ? String(anyObj[k]).trim() : "";
               const row = {
-                timestamp: data.timestamp || it.created_at || "",
-                language: data.language || "",
-                player_name: data.player_name || "",
-                Q2_time: data.Q2_time || "",
-                Q3_time: data.Q3_time || "",
-                Q4_day: data.Q4_day || "",
+                timestamp: get('timestamp') || (issue?.created_at || ''),
+                language: normalizeLang(get('language')),
+                player_name: get('player_name'),
+                Q2_time: get('Q2_time') || get('Q02_time') || get('Q02 (time)') || '',
+                Q3_time: get('Q3_time') || get('Q03_time') || get('Q03 (time)') || '',
+                Q4_day: get('Q4_day') || get('Q04_day') || get('Q04 (day)') || '',
               };
-
-              // 必須が揃わないものはスキップ（空行を作らない）
-              if (!row.player_name || !row.language || !row.Q2_time || !row.Q3_time || !row.Q4_day) {
-                continue;
-              }
-
-              allRows.push(row);
+              const hasValue = Object.values(row).some(v => (v || '') !== '');
+              return hasValue ? row : null;
             }
 
-            // timestamp 降順（新しい→古い）
-            allRows.sort((a,b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+            // ★ OPEN issues ONLY ★
+            core.info(`Fetching OPEN issues only...`);
+            const issues = await github.paginate(
+              github.rest.issues.listForRepo,
+              { owner, repo, state: 'open', per_page: 100 }
+            );
 
-            // 2) latest per player
-            const latestMap = new Map();
-            for (const r of allRows) {
-              const key = r.player_name;
-              if (!latestMap.has(key)) {
-                latestMap.set(key, r); // allRows は新しい順なので最初が最新
+            // latest per player_name
+            const latestByPlayer = new Map();
+
+            for (const issue of issues) {
+              if (issue.pull_request) continue;
+
+              const title = (issue.title || "").trim().toLowerCase();
+              const labels = (issue.labels || []).map(l => (l.name || "").toLowerCase());
+
+              // Identify survey issues (open only, by state above)
+              const isSurvey =
+                labels.includes("survey") ||
+                title.startsWith("survey:") ||
+                (issue.title || "").startsWith("Survey response from:");
+
+              if (!isSurvey) continue;
+
+              const body = issue.body || '';
+
+              let rowObject = null;
+              const j = parseSurveyJson(body);
+              if (j) rowObject = toRowObject(j, issue);
+              else rowObject = toRowObject(parseKeyValue(body), issue);
+
+              if (!rowObject?.player_name) continue;
+
+              const key = rowObject.player_name;
+              const createdAt = new Date(issue.created_at);
+
+              const existing = latestByPlayer.get(key);
+              if (!existing || createdAt > existing.createdAt) {
+                latestByPlayer.set(key, { createdAt, row: rowObject });
               }
             }
-            const latestRows = Array.from(latestMap.values());
 
-            // 出力
-            const csvAll = toCSV(allRows);
-            const csvLatest = toCSV(latestRows);
+            const finalRows = [...latestByPlayer.values()]
+              .sort((a, b) => a.createdAt - b.createdAt)
+              .map(e => e.row);
 
-            fs.writeFileSync(path.join(outDir, "survey_all.csv"), csvAll, "utf8");
-            fs.writeFileSync(path.join(outDir, "survey.csv"), csvLatest, "utf8");
+            const dataDir = path.join(process.cwd(), 'data');
+            fs.mkdirSync(dataDir, { recursive: true });
 
-            core.setOutput("count_all", String(allRows.length));
-            core.setOutput("count_latest", String(latestRows.length));
+            const csvPath = path.join(dataDir, 'survey.csv');
 
-      - name: Commit and push if changed
+            let csv = headers.join(',');
+            if (finalRows.length) {
+              csv += '\n' + finalRows
+                .map(r => headers.map(h => escapeCSV(r[h])).join(','))
+                .join('\n');
+            }
+            csv += '\n';
+
+            fs.writeFileSync(csvPath, csv, 'utf8');
+
+            core.setOutput('csv_path', csvPath);
+            core.setOutput('row_count', finalRows.length);
+
+      - name: Commit and push changes (with rebase & retry)
+        env:
+          BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          set -e
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
 
-          git add data/survey.csv data/survey_all.csv
-
+          git add data/survey.csv
           if git diff --cached --quiet; then
-            echo "No changes to commit."
+            echo "No updates to commit."
             exit 0
           fi
 
-          git commit -m "Update data/survey.csv and data/survey_all.csv"
-          git push
+          git commit -m "Rebuild survey.csv from OPEN issues only"
+
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin "$BRANCH" || true
+            if git push origin HEAD:"$BRANCH"; then
+              echo "Push success"
+              exit 0
+            fi
+            echo "Push failed, retry $i..."
+            sleep 2
+          done
+
+          echo "Push failed after retries"
+          exit 1
